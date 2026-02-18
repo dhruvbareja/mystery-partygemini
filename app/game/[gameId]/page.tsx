@@ -1,0 +1,361 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { Users, CheckCircle, Clock, Loader } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { GameData, Player } from '@/types';
+
+export default function GameLobby() {
+  const params = useParams();
+  const router = useRouter();
+  const game_id = params?.gameId ? String(params.gameId) : null;
+
+  const [game, setGame] = useState<GameData | null>(null);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [joining, setJoining] = useState(false);
+  const [playerName, setPlayerName] = useState('');
+  const [playerId, setPlayerId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    console.log('LOBBY STATE', {
+      loading,
+      game,
+      players,
+      playerId,
+    });
+  }, [loading, game, players, playerId]);
+
+  useEffect(() => {
+    if (!game_id) return;
+
+    loadGameData();
+  }, [game_id]);
+
+  useEffect(() => {
+    if (!game_id) return;
+    const savedPlayerId = localStorage.getItem(`player_${game_id}`);
+    if (savedPlayerId) {
+      setPlayerId(savedPlayerId);
+    }
+  }, [game_id]);
+
+  useEffect(() => {
+    if (!game) return;
+    if (game.phase !== 'lobby' && playerId && typeof window !== 'undefined') {
+      router.replace(`/player/${game_id}`);
+    }
+  }, [game, playerId, game_id]);
+
+  const loadGameData = async () => {
+    setLoading(true);
+    try {
+      if (!game_id) {
+        setError('Invalid game id');
+        return;
+      }
+
+      const { data: gameData, error: gameError } = await supabase
+        .from('games')
+        .select('*')
+        .eq('id', game_id)
+        .single();
+
+      if (gameError || !gameData) {
+        console.error('Game fetch failed', gameError);
+        setError('Game not found');
+        return;
+      }
+
+      const { data: playersData, error: playersError } = await supabase
+        .from('players')
+        .select('*')
+        .eq('game_id', game_id);
+
+      if (playersError) {
+        console.warn('Players fetch failed (non-fatal)', playersError);
+      }
+
+      setGame(gameData);
+      setPlayers(playersData ?? []);
+    } catch (err) {
+      console.error('Fatal load error', err);
+      setError('Failed to load game');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // REALTIME UPDATES (players + game state)
+  // useEffect(() => {
+  //   if (!game_id) return;
+  //
+  //   const channel = supabase
+  //     .channel(`game-${game_id}`)
+  //     .on(
+  //       'postgres_changes',
+  //       {
+  //         event: '*',
+  //         schema: 'public',
+  //         table: 'players',
+  //         filter: `game_id=eq.${game_id}`,
+  //       },
+  //       () => {
+  //         loadGameData();
+  //       }
+  //     )
+  //     .on(
+  //       'postgres_changes',
+  //       {
+  //         event: '*',
+  //         schema: 'public',
+  //         table: 'games',
+  //         filter: `id=eq.${game_id}`,
+  //       },
+  //       () => {
+  //         loadGameData();
+  //       }
+  //     )
+  //     .subscribe();
+  //
+  //   return () => {
+  //     supabase.removeChannel(channel);
+  //   };
+  // }, [game_id]);
+
+  const handleJoin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setJoining(true);
+
+    try {
+      const response = await fetch('/api/game/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId: game_id,
+          playerName: playerName.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to join game');
+      }
+
+      const { playerId: newPlayerId } = await response.json();
+      localStorage.setItem(`player_${game_id}`, newPlayerId);
+      setPlayerId(newPlayerId);
+    } catch (err: any) {
+      setError(err.message);
+      setJoining(false);
+    }
+  };
+
+  const toggleReady = async () => {
+    if (!playerId) return;
+
+    const player = players.find(p => p.id === playerId);
+    await supabase
+      .from('players')
+      .update({ is_ready: !player?.is_ready })
+      .eq('id', playerId);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="spinner" />
+      </div>
+    );
+  }
+
+  if (error && !game) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="mystery-card text-center max-w-md"
+        >
+          <h2 className="font-display text-3xl font-bold mb-4 text-blood">Game Not Found</h2>
+          <p className="text-parchment/70 mb-6">{error}</p>
+          <button onClick={() => router.push('/')} className="btn-primary">
+            Back to Home
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (!game) return null;
+
+  const nonHostPlayers = players.filter(p => !p.is_host);
+  const currentPlayer = players.find(p => p.id === playerId);
+  const allReady = nonHostPlayers.length > 0 && nonHostPlayers.every(p => p.is_ready);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-3xl"
+      >
+        <div className="text-center mb-8">
+          <h1 className="font-display text-5xl md:text-6xl font-bold mb-4 glow-text">
+            {game.name}
+          </h1>
+          <p className="text-xl text-parchment/70 mb-2">Game Code: {game_id}</p>
+          <div className="inline-block badge badge-innocent text-lg px-4 py-2">
+            <Clock className="inline mr-2" size={18} />
+            Waiting for players...
+          </div>
+        </div>
+
+        {!playerId ? (
+          // Join Form
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mystery-card max-w-md mx-auto"
+          >
+            <h2 className="font-display text-3xl font-semibold mb-6 text-center">Join the Mystery</h2>
+            
+            <form onSubmit={handleJoin} className="space-y-4">
+              <div>
+                <label className="block text-parchment/80 mb-2">Your Name</label>
+                <input
+                  type="text"
+                  value={playerName}
+                  onChange={(e) => setPlayerName(e.target.value)}
+                  placeholder="Enter your name"
+                  className="input-mystery"
+                  maxLength={20}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              {error && (
+                <div className="p-3 bg-blood/20 border border-blood/50 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={joining || !playerName.trim()}
+                className="btn-primary w-full py-3 disabled:opacity-50"
+              >
+                {joining ? (
+                  <span className="flex items-center gap-2 justify-center">
+                    <Loader className="animate-spin" size={20} />
+                    Joining...
+                  </span>
+                ) : (
+                  'Join Game'
+                )}
+              </button>
+            </form>
+          </motion.div>
+        ) : (
+          // Lobby View
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mystery-card mb-6"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="font-display text-2xl font-semibold flex items-center gap-2">
+                  <Users size={24} />
+                  Players ({nonHostPlayers.length})
+                </h2>
+                
+                {currentPlayer && (
+                  <button
+                    onClick={toggleReady}
+                    className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                      currentPlayer.is_ready
+                        ? 'bg-green-600 hover:bg-green-700'
+                        : 'bg-parchment/20 hover:bg-parchment/30'
+                    }`}
+                  >
+                    {currentPlayer.is_ready ? (
+                      <span className="flex items-center gap-2">
+                        <CheckCircle size={18} />
+                        Ready!
+                      </span>
+                    ) : (
+                      'Ready Up'
+                    )}
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {nonHostPlayers.map((player, index) => (
+                  <motion.div
+                    key={player.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className={`p-4 rounded-lg border-2 transition-all ${
+                      player.is_ready
+                        ? 'bg-green-900/20 border-green-600/50'
+                        : 'bg-ink/30 border-gold/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-4xl">{player.avatar}</span>
+                      <div className="flex-1">
+                        <p className="font-semibold text-lg">{player.name}</p>
+                        <p className="text-sm text-parchment/60">
+                          {player.is_ready ? (
+                            <span className="text-green-400">✓ Ready</span>
+                          ) : (
+                            'Not ready'
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="mystery-card text-center"
+            >
+              <h3 className="font-display text-2xl font-semibold mb-3">About This Mystery</h3>
+              <p className="text-parchment/70 mb-4">{game.theme}</p>
+              <div className="inline-block bg-ink/40 px-6 py-3 rounded-lg">
+                <p className="text-sm text-parchment/60 mb-1">Waiting for host to start...</p>
+                {allReady && (
+                  <p className="text-green-400 font-semibold">All players ready!</p>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+
+        {playerId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="text-center mt-6 text-parchment/50 text-sm"
+          >
+            <p>Share this code with your friends: <span className="font-bold text-gold">{game_id}</span></p>
+          </motion.div>
+        )}
+      </motion.div>
+    </div>
+  );
+}

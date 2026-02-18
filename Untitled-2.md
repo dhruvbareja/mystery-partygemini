@@ -1,0 +1,32 @@
+```
+└── 📁app
+    └── 📁{api
+        └── 📁{game,ai},create,game
+            └── 📁[game_id],host
+                └── 📁[game_id],player
+                    └── 📁[game_id]}
+    └── 📁api
+        └── 📁game
+            └── 📁create
+                ├── route.ts
+            └── 📁join
+                ├── route.ts
+        └── 📁test-gemini
+            ├── route.ts
+    └── 📁create
+        ├── page.tsx
+    └── 📁game
+        └── 📁[game_id]
+            ├── page.tsx
+    └── 📁host
+        └── 📁[game_id]
+            ├── page.tsx
+    └── 📁player
+        └── 📁[game_id]
+            ├── page.tsx
+    └── 📁test-gemini
+        ├── page.tsx
+    ├── globals.css
+    ├── layout.tsx
+    └── page.tsx
+```
