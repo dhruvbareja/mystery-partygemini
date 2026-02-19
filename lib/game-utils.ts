@@ -41,19 +41,36 @@ export const getPhaseDescription = (phase: GamePhase): string => {
 
 export const calculateSuspicion = (
   playerId: string,
-  messages: any[],
-  votes: any[]
+  messages: { sender_id: string; message_type?: string; round?: number }[],
+  votes: { accused_id: string }[]
 ): number => {
   const votesAgainst = votes.filter(v => v.accused_id === playerId).length;
-  const messageCount = messages.filter(m => m.sender_id === playerId).length;
 
-  const suspicionFromVotes = votesAgainst * 20;
-  const suspicionFromActivity = Math.min(messageCount * 2, 30);
+  const publicMessages = messages.filter(
+    m => m.sender_id === playerId && m.message_type === 'global'
+  ).length;
 
-  return Math.min(
-    suspicionFromVotes + Math.random() * 50 - suspicionFromActivity,
-    100
-  );
+  const allianceMessages = messages.filter(
+    m => m.sender_id === playerId && m.message_type === 'alliance'
+  ).length;
+
+  const suspicionFromVotes = votesAgainst * 25;
+
+  // Talking publicly reduces suspicion slightly
+  const suspicionReductionFromPublic = Math.min(publicMessages * 2, 20);
+
+  // Secret alliance chatter increases suspicion slightly
+  const suspicionFromAlliance = allianceMessages * 5;
+
+  const randomNoise = Math.random() * 20;
+
+  const total =
+    suspicionFromVotes +
+    suspicionFromAlliance +
+    randomNoise -
+    suspicionReductionFromPublic;
+
+  return Math.max(0, Math.min(total, 100));
 };
 
 export const formatTimeRemaining = (seconds: number): string => {

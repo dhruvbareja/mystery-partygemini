@@ -46,45 +46,85 @@ Notes: ${input.customNotes ?? ""}
   }
 
   const data = await response.json();
-  console.log("OLLAMA RAW:", data.response);
+  console.log("OLLAMA RAW:", data?.response);
 
-  let raw = data.response ?? '';
+  let raw = data?.response ?? '';
 
-  /* ---------------- CLEAN MODEL OUTPUT ---------------- */
+  if (!raw) {
+    console.error('Empty AI response');
+    return {
+      story: 'A mysterious murder has occurred.',
+      victim: 'Unknown Victim',
+      killer: input.playerNames[0] || '',
+      characters: [],
+      locations: input.locations,
+      clues: [],
+      timeline: [],
+      twists: [],
+      evidence: [],
+      endingText: 'The mystery is solved.'
+    };
+  }
 
-  // Remove markdown fences if model wraps JSON
-  raw = raw.replace(/```json/g, '').replace(/```/g, '').trim();
+  // Remove markdown fences
+  raw = raw
+    .replace(/```json/g, '')
+    .replace(/```/g, '')
+    .trim();
 
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
 
   if (start === -1 || end === -1) {
-    throw new Error('Model did not return JSON');
+    console.error('Model did not return valid JSON block:', raw);
+    return {
+      story: 'A mysterious murder has occurred.',
+      victim: 'Unknown Victim',
+      killer: input.playerNames[0] || '',
+      characters: [],
+      locations: input.locations,
+      clues: [],
+      timeline: [],
+      twists: [],
+      evidence: [],
+      endingText: 'The mystery is solved.'
+    };
   }
 
   const jsonString = raw.slice(start, end + 1);
 
-  let parsed: any;
+  let parsed: any = {};
 
   try {
     parsed = JSON.parse(jsonString);
   } catch (err) {
     console.error('Invalid JSON from model:', jsonString);
-    throw new Error('AI returned invalid JSON');
+    return {
+      story: 'A mysterious murder has occurred.',
+      victim: 'Unknown Victim',
+      killer: input.playerNames[0] || '',
+      characters: [],
+      locations: input.locations,
+      clues: [],
+      timeline: [],
+      twists: [],
+      evidence: [],
+      endingText: 'The mystery is solved.'
+    };
   }
 
-  /* ---------------- SAFETY NORMALIZATION ---------------- */
-
   return {
-    story: parsed.story ?? 'A mysterious murder has occurred.',
-    victim: parsed.victim ?? 'Unknown Victim',
-    killer: parsed.killer ?? '',
+    story: parsed.story || 'A mysterious murder has occurred.',
+    victim: parsed.victim || 'Unknown Victim',
+    killer: parsed.killer || input.playerNames[0] || '',
     characters: Array.isArray(parsed.characters) ? parsed.characters : [],
-    locations: Array.isArray(parsed.locations) ? parsed.locations : [],
+    locations: Array.isArray(parsed.locations) && parsed.locations.length
+      ? parsed.locations
+      : input.locations,
     clues: Array.isArray(parsed.clues) ? parsed.clues : [],
     timeline: Array.isArray(parsed.timeline) ? parsed.timeline : [],
     twists: Array.isArray(parsed.twists) ? parsed.twists : [],
     evidence: Array.isArray(parsed.evidence) ? parsed.evidence : [],
-    endingText: parsed.endingText ?? 'The mystery is solved.'
+    endingText: parsed.endingText || 'The mystery is solved.'
   };
 }

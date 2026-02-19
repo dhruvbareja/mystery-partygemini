@@ -116,9 +116,16 @@ export default function HostDashboard() {
 
     console.log("Assigning roles:", roles.length, "Players:", playersData.length);
 
-    // Assign roles in order
+    // Shuffle roles before assigning
+    const shuffledRoles = [...roles].sort(() => Math.random() - 0.5);
+
     for (let i = 0; i < playersData.length; i++) {
-      const roleId = roles[i]?.id ?? null;
+      const roleId = shuffledRoles[i]?.id;
+
+      if (!roleId) {
+        console.warn("Not enough roles for players");
+        break;
+      }
 
       const { error } = await supabase
         .from('players')
@@ -149,8 +156,8 @@ export default function HostDashboard() {
       'lobby',
       'role_reveal',
       'intro_round',
-      'investigation',
       'clue_drop',
+      'investigation',
       'accusations',
       'voting',
       'reveal',
@@ -161,7 +168,7 @@ export default function HostDashboard() {
     const next = phases[nextIndex] || 'finished';
 
     const newRound =
-      next === 'investigation'
+      next === 'intro_round' || next === 'investigation'
         ? game.current_round + 1
         : game.current_round;
 
@@ -275,7 +282,7 @@ export default function HostDashboard() {
           <p><b>Victim:</b> {game.victim}</p>
           <p><b>Killer:</b> {game.killer}</p>
           <p><b>Current Round:</b> {game.current_round}</p>
-          <p><b>Phase:</b> {game.phase}</p>
+          <p><b>Phase:</b> {PHASE_LABELS[game.phase]}</p>
         </div>
       </div>
 

@@ -45,13 +45,15 @@ export default function GameLobby() {
 
   useEffect(() => {
     if (!game) return;
-    if (game.phase !== 'lobby' && playerId && typeof window !== 'undefined') {
+    if (!playerId) return;
+
+    // Only redirect when phase actually moves past lobby
+    if (game.phase && game.phase !== 'lobby') {
       router.replace(`/player/${game_id}`);
     }
-  }, [game, playerId, game_id, router]);
+  }, [game?.phase, playerId]);
 
   const loadGameData = async () => {
-    setLoading(true);
     setError('');
     try {
       if (!game_id) {
@@ -63,7 +65,7 @@ export default function GameLobby() {
         .from('games')
         .select('*')
         .eq('id', game_id)
-        .single();
+        .maybeSingle();
 
       if (gameError || !gameData) {
         console.error('Game fetch failed', gameError);
@@ -82,11 +84,20 @@ export default function GameLobby() {
 
       setGame(gameData);
       setPlayers(playersData ?? []);
+      // Only turn off loading on first load to prevent realtime spinner loops
+      if (loading) {
+        setLoading(false);
+      }
+      // If game already started and player exists, auto-redirect
+      if (gameData?.phase && gameData.phase !== 'lobby') {
+        const savedPlayerId = localStorage.getItem(`player_${game_id}`);
+        if (savedPlayerId) {
+          router.replace(`/player/${game_id}`);
+        }
+      }
     } catch (err) {
       console.error('Fatal load error', err);
       setError('Failed to load game');
-    } finally {
-      setLoading(false);
     }
   };
 

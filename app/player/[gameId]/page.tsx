@@ -16,7 +16,7 @@ import type { Vote } from '@/types';
 export default function PlayerView() {
   const params = useParams();
   const router = useRouter();
-  const game_id = params.game_id as string;
+  const game_id = params.gameId as string;
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -58,7 +58,7 @@ export default function PlayerView() {
     // ✅ FIX: realtime cleanup to avoid memory leaks
     const cleanup = setupRealtimeSubscriptions(playerId);
     return cleanup;
-  }, [game_id]);
+  }, [game_id, router]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

@@ -118,6 +118,12 @@ export type Message = {
 
   is_system_message: boolean;
 
+  // NEW: message classification
+  message_type: 'global' | 'dm' | 'alliance';
+
+  // NEW: round tracking
+  round: number;
+
   created_at: string;
 };
 
@@ -132,4 +138,23 @@ export type Vote = {
   accused_id: string;
 
   round: number;
+};
+
+
+/* ---------------- ALLIANCE ---------------- */
+
+export type Alliance = {
+  id: string;
+  game_id: string;
+
+  name: string;
+
+  created_by: string;   // player_id
+  member_ids: string[]; // array of player_ids
+
+  created_at: string;
+};
+
+export type AllianceMessage = Message & {
+  message_type: 'alliance';
 };
