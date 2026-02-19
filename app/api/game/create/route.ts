@@ -8,14 +8,20 @@ import { nanoid } from 'nanoid';
 export async function POST(request: NextRequest) {
   try {
    let body: any = {};
-try {
-  body = await request.json();
-} catch {
-  return NextResponse.json(
-    { error: 'Invalid or empty JSON body' },
-    { status: 400 }
-  );
-}
+
+  try {
+    body = await request.json();
+  } catch {
+    // 🔥 Dev shortcut: auto-fill test data if no body provided
+    body = {
+      gameName: 'Test Mystery',
+      playerNames: ['Alice', 'Bob', 'Charlie', 'David'],
+      locations: ['Library', 'Kitchen', 'Garden'],
+      theme: 'Classic Manor Murder',
+      customNotes: ''
+    };
+    console.log('Using DEV fallback body:', body);
+  }
     const { gameName, playerNames, locations, theme, customNotes } = body;
 
     /* ------------------------------------------------ */
@@ -23,10 +29,7 @@ try {
     /* ------------------------------------------------ */
 
     if (!gameName || !playerNames || !locations || !theme) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
+      console.log('Missing fields, but continuing in DEV mode');
     }
 
     if (playerNames.length < 3) {
@@ -41,6 +44,7 @@ try {
     /* ------------------------------------------------ */
 
     console.log('Generating mystery with AI...');
+    console.log('INPUT:', { gameName, playerNames, locations, theme, customNotes });
 
     const mysteryData = await generateMysteryGame({
       gameName,
@@ -49,6 +53,7 @@ try {
       theme,
       customNotes,
     });
+    console.log('RAW MYSTERY DATA:', mysteryData);
 
     /* ------------------------------------------------ */
     /* SAFETY: sanitize ALL AI output                   */
@@ -58,6 +63,22 @@ try {
     const safeClues = mysteryData?.clues ?? [];
     const safeLocations = mysteryData?.locations ?? [];
     const safeTwists = mysteryData?.twists ?? [];
+
+    if (!mysteryData?.story || !mysteryData?.victim || !mysteryData?.killer) {
+      console.error('AI returned incomplete data. Using fallback values.', mysteryData);
+
+      mysteryData.story ||= 'A mysterious incident has occurred.';
+      mysteryData.victim ||= 'Unknown Victim';
+      mysteryData.killer ||= 'Unknown Killer';
+    }
+
+    if (!Array.isArray(safeLocations)) {
+      console.error('Locations is not an array:', safeLocations);
+      return NextResponse.json(
+        { error: 'AI returned invalid locations format' },
+        { status: 500 }
+      );
+    }
 
     const game_id = generateGameCode();
     const hostId = nanoid();
@@ -90,9 +111,9 @@ try {
       });
 
     if (gameError) {
-      console.error('Game creation error:', gameError);
+      console.error('GAME INSERT ERROR FULL:', JSON.stringify(gameError, null, 2));
       return NextResponse.json(
-        { error: 'Failed to create game' },
+        { error: 'Failed to create game', details: gameError },
         { status: 500 }
       );
     }
@@ -119,7 +140,9 @@ try {
         .from('roles')
         .insert(rolesData);
 
-      if (rolesError) console.error('Roles creation error:', rolesError);
+      if (rolesError) {
+        console.error('ROLES INSERT ERROR FULL:', JSON.stringify(rolesError, null, 2));
+      }
     }
 
     /* ------------------------------------------------ */
@@ -139,7 +162,9 @@ try {
         .from('clues')
         .insert(cluesData);
 
-      if (cluesError) console.error('Clues creation error:', cluesError);
+      if (cluesError) {
+        console.error('CLUES INSERT ERROR FULL:', JSON.stringify(cluesError, null, 2));
+      }
     }
 
     /* ------------------------------------------------ */
@@ -159,7 +184,9 @@ try {
         suspicion_level: 0,
       });
 
-    if (hostError) console.error('Host creation error:', hostError);
+    if (hostError) {
+      console.error('HOST INSERT ERROR FULL:', JSON.stringify(hostError, null, 2));
+    }
 
     /* ------------------------------------------------ */
     /* Success                                          */

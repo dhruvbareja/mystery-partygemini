@@ -10,7 +10,7 @@ import { GameData, Player } from '@/types';
 export default function GameLobby() {
   const params = useParams();
   const router = useRouter();
-  const game_id = params?.gameId ? String(params.gameId) : null;
+  const game_id = String(params?.gameId || '');
 
   const [game, setGame] = useState<GameData | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -48,10 +48,11 @@ export default function GameLobby() {
     if (game.phase !== 'lobby' && playerId && typeof window !== 'undefined') {
       router.replace(`/player/${game_id}`);
     }
-  }, [game, playerId, game_id]);
+  }, [game, playerId, game_id, router]);
 
   const loadGameData = async () => {
     setLoading(true);
+    setError('');
     try {
       if (!game_id) {
         setError('Invalid game id');
@@ -90,46 +91,52 @@ export default function GameLobby() {
   };
 
   // REALTIME UPDATES (players + game state)
-  // useEffect(() => {
-  //   if (!game_id) return;
-  //
-  //   const channel = supabase
-  //     .channel(`game-${game_id}`)
-  //     .on(
-  //       'postgres_changes',
-  //       {
-  //         event: '*',
-  //         schema: 'public',
-  //         table: 'players',
-  //         filter: `game_id=eq.${game_id}`,
-  //       },
-  //       () => {
-  //         loadGameData();
-  //       }
-  //     )
-  //     .on(
-  //       'postgres_changes',
-  //       {
-  //         event: '*',
-  //         schema: 'public',
-  //         table: 'games',
-  //         filter: `id=eq.${game_id}`,
-  //       },
-  //       () => {
-  //         loadGameData();
-  //       }
-  //     )
-  //     .subscribe();
-  //
-  //   return () => {
-  //     supabase.removeChannel(channel);
-  //   };
-  // }, [game_id]);
+  useEffect(() => {
+    if (!game_id) return;
+
+    const channel = supabase
+      .channel(`lobby-${game_id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'players',
+          filter: `game_id=eq.${game_id}`,
+        },
+        () => {
+          loadGameData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'games',
+          filter: `id=eq.${game_id}`,
+        },
+        () => {
+          loadGameData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [game_id]);
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setJoining(true);
+
+    if (!game_id) {
+      setError('Invalid game ID');
+      setJoining(false);
+      return;
+    }
 
     try {
       const response = await fetch('/api/game/join', {
@@ -149,6 +156,7 @@ export default function GameLobby() {
       const { playerId: newPlayerId } = await response.json();
       localStorage.setItem(`player_${game_id}`, newPlayerId);
       setPlayerId(newPlayerId);
+      setJoining(false);
     } catch (err: any) {
       setError(err.message);
       setJoining(false);
@@ -163,6 +171,7 @@ export default function GameLobby() {
       .from('players')
       .update({ is_ready: !player?.is_ready })
       .eq('id', playerId);
+    await loadGameData();
   };
 
   if (loading) {

@@ -11,6 +11,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { GameData, Player, Message, Clue } from '@/types';
 import { PHASE_LABELS, getPhaseDescription } from '@/lib/game-utils';
+import type { Vote } from '@/types';
 
 export default function PlayerView() {
   const params = useParams();
@@ -26,6 +27,7 @@ export default function PlayerView() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [clues, setClues] = useState<Clue[]>([]);
+  const [votes, setVotes] = useState<Vote[]>([]);
 
   const [loading, setLoading] = useState(true);
 
@@ -98,11 +100,17 @@ export default function PlayerView() {
         .eq('game_id', game_id)
         .eq('revealed', true);
 
+      const { data: votesData } = await supabase
+        .from('votes')
+        .select('*')
+        .eq('game_id', game_id);
+
       setGame(gameData);
       setPlayer(playerData);
       setPlayers(playersData || []);
       setMessages(messagesData || []);
       setClues(cluesData || []);
+      setVotes(votesData || []);
 
       // role
       if (playerData?.role_id) {
@@ -213,7 +221,30 @@ export default function PlayerView() {
     <div className="p-6 space-y-6">
 
       <h1 className="text-2xl font-bold">{game.name}</h1>
-      <p>{PHASE_LABELS[game.phase]}</p>
+      <p className="text-sm text-gray-400">
+        {PHASE_LABELS[game.phase]} — Round {game.current_round}
+      </p>
+      <p className="text-sm text-gray-500">
+        {getPhaseDescription(game.phase)}
+      </p>
+
+      {game.phase !== 'lobby' && (
+        <div className="bg-gray-800 p-3 rounded text-sm">
+          <b>Story:</b> {game.story}
+        </div>
+      )}
+
+      <div className="flex gap-3 text-sm">
+        {['chat','role','clues','players'].map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab as any)}
+            className={activeTab === tab ? 'font-bold underline' : ''}
+          >
+            {tab.toUpperCase()}
+          </button>
+        ))}
+      </div>
 
       {/* ---------------- CHAT ---------------- */}
       {activeTab === 'chat' && (
@@ -256,6 +287,47 @@ export default function PlayerView() {
           {role.secrets?.map((s: string, i: number) => (
             <p key={i}>🔒 {s}</p>
           ))}
+        </div>
+      )}
+
+      {/* ---------------- CLUES ---------------- */}
+      {activeTab === 'clues' && (
+        <div className="space-y-2">
+          {clues.length === 0 && <p>No clues revealed yet.</p>}
+          {clues.map(c => (
+            <div key={c.id} className="bg-gray-800 p-2 rounded">
+              📍 {c.location} — {c.text}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ---------------- PLAYERS ---------------- */}
+      {activeTab === 'players' && (
+        <div className="space-y-2">
+          {players
+            .filter(p => !p.is_host)
+            .map(p => (
+              <div key={p.id} className="bg-gray-800 p-2 rounded">
+                {p.name}
+              </div>
+            ))}
+        </div>
+      )}
+
+      {game.phase === 'voting' && (
+        <div className="bg-red-900 p-3 rounded">
+          <b>Votes this round:</b>
+          {votes
+            .filter(v => v.round === game.current_round)
+            .map(v => {
+              const accused = players.find(p => p.id === v.accused_id);
+              return (
+                <div key={v.id}>
+                  🔴 Vote against {accused?.name}
+                </div>
+              );
+            })}
         </div>
       )}
     </div>

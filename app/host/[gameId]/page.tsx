@@ -22,7 +22,7 @@ import { PHASE_LABELS } from '@/lib/game-utils';
 export default function HostDashboard() {
   const params = useParams();
   const router = useRouter();
-  const game_id = params.game_id as string;
+  const game_id = params.gameId as string;
 
   const [game, setGame] = useState<GameData | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -38,6 +38,7 @@ export default function HostDashboard() {
     if (!game_id) return;
 
     const hostId = localStorage.getItem(`host_${game_id}`);
+
     if (!hostId) {
       router.push(`/game/${game_id}`);
       return;
@@ -48,18 +49,34 @@ export default function HostDashboard() {
   }, [game_id]);
 
   const loadGameData = async () => {
-    const { data: gameData } = await supabase.from('games').select('*').eq('id', game_id).single();
-    const { data: playersData } = await supabase.from('players').select('*').eq('game_id', game_id);
-    const { data: cluesData } = await supabase.from('clues').select('*').eq('game_id', game_id);
+    const { data: gameData, error: gameError } = await supabase
+      .from('games')
+      .select('*')
+      .eq('id', game_id)
+      .maybeSingle();
+
+    const { data: playersData } = await supabase
+      .from('players')
+      .select('*')
+      .eq('game_id', game_id);
+
+    const { data: cluesData } = await supabase
+      .from('clues')
+      .select('*')
+      .eq('game_id', game_id);
+
     const { data: messagesData } = await supabase
       .from('messages')
       .select('*')
       .eq('game_id', game_id)
       .order('created_at', { ascending: false });
 
-    const { data: votesData } = await supabase.from('votes').select('*').eq('game_id', game_id);
+    const { data: votesData } = await supabase
+      .from('votes')
+      .select('*')
+      .eq('game_id', game_id);
 
-    setGame(gameData);
+    setGame(gameData ?? null);
     setPlayers(playersData || []);
     setClues(cluesData || []);
     setMessages(messagesData || []);
@@ -79,19 +96,47 @@ export default function HostDashboard() {
   const startGame = async () => {
     if (!game) return;
 
-    const nonHostPlayers = players.filter(p => !p.is_host);
+    // Fetch roles
+    const { data: roles } = await supabase
+      .from('roles')
+      .select('*')
+      .eq('game_id', game_id);
 
-    const { data: roles } = await supabase.from('roles').select('*').eq('game_id', game_id);
+    // Fetch non-host players
+    const { data: playersData } = await supabase
+      .from('players')
+      .select('*')
+      .eq('game_id', game_id)
+      .eq('is_host', false);
 
-    if (roles && roles.length === nonHostPlayers.length) {
-      for (let i = 0; i < roles.length; i++) {
-        await supabase.from('players').update({ role_id: roles[i].id }).eq('id', nonHostPlayers[i].id);
+    if (!roles || !playersData) {
+      console.error("Missing roles or players");
+      return;
+    }
+
+    console.log("Assigning roles:", roles.length, "Players:", playersData.length);
+
+    // Assign roles in order
+    for (let i = 0; i < playersData.length; i++) {
+      const roleId = roles[i]?.id ?? null;
+
+      const { error } = await supabase
+        .from('players')
+        .update({ role_id: roleId })
+        .eq('id', playersData[i].id);
+
+      if (error) {
+        console.error("Role assignment error:", error);
       }
     }
 
+    // Move to role reveal phase
     await supabase
       .from('games')
-      .update({ phase: 'role_reveal', started_at: new Date().toISOString() })
+      .update({
+        phase: 'role_reveal',
+        started_at: new Date().toISOString()
+      })
       .eq('id', game_id);
 
     loadGameData();
@@ -112,9 +157,21 @@ export default function HostDashboard() {
       'finished'
     ];
 
-    const next = phases[phases.indexOf(game.phase) + 1] || 'finished';
+    const nextIndex = phases.indexOf(game.phase) + 1;
+    const next = phases[nextIndex] || 'finished';
 
-    await supabase.from('games').update({ phase: next }).eq('id', game_id);
+    const newRound =
+      next === 'investigation'
+        ? game.current_round + 1
+        : game.current_round;
+
+    await supabase
+      .from('games')
+      .update({
+        phase: next,
+        current_round: newRound
+      })
+      .eq('id', game_id);
   };
 
   const pauseGame = async () => {
@@ -209,6 +266,19 @@ export default function HostDashboard() {
         )}
       </motion.div>
 
+      {/* STORY PANEL */}
+      <div className="bg-gray-900 p-4 rounded space-y-2">
+        <h2 className="text-xl font-bold">🕯 Story Overview</h2>
+        <p>{game.story}</p>
+
+        <div className="text-sm mt-2 space-y-1">
+          <p><b>Victim:</b> {game.victim}</p>
+          <p><b>Killer:</b> {game.killer}</p>
+          <p><b>Current Round:</b> {game.current_round}</p>
+          <p><b>Phase:</b> {game.phase}</p>
+        </div>
+      </div>
+
       {/* Messages */}
       <div className="space-y-2">
         {messages.slice(0, 10).map(msg => {
@@ -222,13 +292,46 @@ export default function HostDashboard() {
         })}
       </div>
 
-      {/* Clues */}
+      {/* ALL CLUES */}
       <div className="space-y-2">
-        {unrevealedClues.map(c => (
-          <button key={c.id} onClick={() => revealClue(c.id)} className="btn-primary w-full">
-            Reveal clue at {c.location}
-          </button>
+        <h2 className="text-lg font-bold">🧩 Clues</h2>
+
+        {clues.map(c => (
+          <div key={c.id} className="bg-gray-800 p-2 rounded flex justify-between items-center">
+            <span>
+              {c.revealed ? "✅" : "❌"} {c.location}
+            </span>
+
+            {!c.revealed && (
+              <button
+                onClick={() => revealClue(c.id)}
+                className="btn-primary"
+              >
+                Reveal
+              </button>
+            )}
+          </div>
         ))}
+      </div>
+
+      {/* VOTES */}
+      <div className="space-y-2">
+        <h2 className="text-lg font-bold">🗳 Votes</h2>
+
+        {votes.length === 0 && (
+          <div className="text-sm text-gray-400">No votes yet</div>
+        )}
+
+        {votes.map(v => {
+          const voter = players.find(p => p.id === v.voter_id);
+          const accused = players.find(p => p.id === v.accused_id);
+
+          return (
+            <div key={v.id} className="bg-gray-800 p-2 rounded text-sm">
+              {voter?.name || 'Unknown'} → {accused?.name || 'Unknown'}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

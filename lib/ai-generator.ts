@@ -46,11 +46,45 @@ Notes: ${input.customNotes ?? ""}
   }
 
   const data = await response.json();
+  console.log("OLLAMA RAW:", data.response);
 
-  const match = data.response?.match(/\{[\s\S]*\}/);
-  if (!match) {
+  let raw = data.response ?? '';
+
+  /* ---------------- CLEAN MODEL OUTPUT ---------------- */
+
+  // Remove markdown fences if model wraps JSON
+  raw = raw.replace(/```json/g, '').replace(/```/g, '').trim();
+
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+
+  if (start === -1 || end === -1) {
     throw new Error('Model did not return JSON');
   }
 
-  return JSON.parse(match[0]);
+  const jsonString = raw.slice(start, end + 1);
+
+  let parsed: any;
+
+  try {
+    parsed = JSON.parse(jsonString);
+  } catch (err) {
+    console.error('Invalid JSON from model:', jsonString);
+    throw new Error('AI returned invalid JSON');
+  }
+
+  /* ---------------- SAFETY NORMALIZATION ---------------- */
+
+  return {
+    story: parsed.story ?? 'A mysterious murder has occurred.',
+    victim: parsed.victim ?? 'Unknown Victim',
+    killer: parsed.killer ?? '',
+    characters: Array.isArray(parsed.characters) ? parsed.characters : [],
+    locations: Array.isArray(parsed.locations) ? parsed.locations : [],
+    clues: Array.isArray(parsed.clues) ? parsed.clues : [],
+    timeline: Array.isArray(parsed.timeline) ? parsed.timeline : [],
+    twists: Array.isArray(parsed.twists) ? parsed.twists : [],
+    evidence: Array.isArray(parsed.evidence) ? parsed.evidence : [],
+    endingText: parsed.endingText ?? 'The mystery is solved.'
+  };
 }

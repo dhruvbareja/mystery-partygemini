@@ -5,10 +5,25 @@ import { nanoid } from 'nanoid';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { game_id, playerName } = body;
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch {
+      body = {};
+    }
 
-    if (!game_id || !playerName) {
+    const { game_id, gameId, playerName } = body || {};
+    const finalGameId =
+      typeof game_id === 'string'
+        ? game_id.toUpperCase()
+        : typeof gameId === 'string'
+        ? gameId.toUpperCase()
+        : undefined;
+
+    const finalPlayerName =
+      typeof playerName === 'string' ? playerName.trim() : '';
+
+    if (!finalGameId || !finalPlayerName) {
       return NextResponse.json(
         { error: 'Missing game ID or player name' },
         { status: 400 }
@@ -19,7 +34,7 @@ export async function POST(request: NextRequest) {
     const { data: game, error: gameError } = await supabase
       .from('games')
       .select('*')
-      .eq('id', game_id.toUpperCase())
+      .eq('id', finalGameId)
       .single();
 
     if (gameError || !game) {
@@ -42,7 +57,7 @@ export async function POST(request: NextRequest) {
       .from('players')
       .select('id')
       .eq('game_id', game.id)
-      .eq('name', playerName.trim())
+      .eq('name', finalPlayerName)
       .single();
 
     if (existingPlayer) {
@@ -80,7 +95,7 @@ export async function POST(request: NextRequest) {
       .insert({
         id: playerId,
         game_id: game.id,
-        name: playerName.trim(),
+        name: finalPlayerName,
         avatar: getRandomAvatar(),
         role_id: null, // Assigned when game starts
         is_host: false,

@@ -87,18 +87,26 @@ export default function CreateGame() {
         }),
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to create game');
+      let data: any = {};
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error('Invalid server response');
       }
 
-      const { game_id, hostId } = await response.json();
-      
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to create game');
+      }
+
+      if (!data?.game_id || !data?.hostId) {
+        throw new Error('Server returned incomplete game data');
+      }
+
       // Store host ID in localStorage
-      localStorage.setItem(`host_${game_id}`, hostId);
-      
+      localStorage.setItem(`host_${data.game_id}`, data.hostId);
+
       // Redirect to host dashboard
-      router.push(`/host/${game_id}`);
+      router.push(`/host/${data.game_id}`);
     } catch (err: any) {
       setError(err.message);
       setLoading(false);
