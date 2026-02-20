@@ -85,10 +85,38 @@ export default function HostDashboard() {
   };
 
   const setupRealtime = () => {
-    supabase
+    const channel = supabase
       .channel(`game-${game_id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: '*' }, loadGameData)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'games', filter: `id=eq.${game_id}` },
+        loadGameData
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'players', filter: `game_id=eq.${game_id}` },
+        loadGameData
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'messages', filter: `game_id=eq.${game_id}` },
+        loadGameData
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'clues', filter: `game_id=eq.${game_id}` },
+        loadGameData
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'votes', filter: `game_id=eq.${game_id}` },
+        loadGameData
+      )
       .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   };
 
   /* ---------------- HOST ACTIONS ---------------- */
@@ -112,6 +140,10 @@ export default function HostDashboard() {
     if (!roles || !playersData) {
       console.error("Missing roles or players");
       return;
+    }
+
+    if (playersData.length !== roles.length) {
+      console.warn("Players and roles mismatch");
     }
 
     console.log("Assigning roles:", roles.length, "Players:", playersData.length);
@@ -145,6 +177,14 @@ export default function HostDashboard() {
         started_at: new Date().toISOString()
       })
       .eq('id', game_id);
+
+    await supabase.from('messages').insert({
+      game_id: game_id,
+      sender_id: game.host_id,
+      recipient_id: null,
+      content: '🎭 The game has begun! Introduce your character and state where you were during the murder.',
+      is_system_message: true
+    });
 
     loadGameData();
   };
@@ -243,6 +283,22 @@ export default function HostDashboard() {
           {copied ? <Check size={16} /> : <Copy size={16} />}
           {copied ? 'Copied!' : 'Share Link'}
         </button>
+      </div>
+
+      {/* PLAYERS PANEL */}
+      <div className="bg-gray-900 p-4 rounded">
+        <h2 className="text-lg font-bold mb-2">👥 Players</h2>
+        {nonHostPlayers.length === 0 && (
+          <div className="text-sm text-gray-400">No players joined yet</div>
+        )}
+        {nonHostPlayers.map(p => (
+          <div key={p.id} className="flex justify-between text-sm py-1">
+            <span>{p.name}</span>
+            <span>
+              {p.role_id ? "🎭 Assigned" : "⏳ Waiting"}
+            </span>
+          </div>
+        ))}
       </div>
 
       {/* Controls */}

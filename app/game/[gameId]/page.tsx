@@ -218,20 +218,26 @@ export default function GameLobby() {
   const allReady = nonHostPlayers.length > 0 && nonHostPlayers.every(p => p.is_ready);
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#0f0f16] via-[#151521] to-[#1c1c2b] text-gray-200 flex items-center justify-center p-6">
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-3xl"
+        className="w-full max-w-4xl"
       >
-        <div className="text-center mb-8">
-          <h1 className="font-display text-5xl md:text-6xl font-bold mb-4 glow-text">
+        <div className="text-center mb-10">
+          <h1 className="font-display text-5xl md:text-6xl font-bold mb-3 tracking-wide text-gold drop-shadow-lg">
             {game.name}
           </h1>
-          <p className="text-xl text-parchment/70 mb-2">Game Code: {game_id}</p>
-          <div className="inline-block badge badge-innocent text-lg px-4 py-2">
-            <Clock className="inline mr-2" size={18} />
-            Waiting for players...
+          <p className="text-lg text-gray-400 mb-3">Game Code</p>
+          <div className="inline-flex items-center gap-3 bg-[#1f1f2e] border border-gold/30 px-6 py-3 rounded-xl shadow-lg">
+            <span className="text-2xl font-bold tracking-widest text-gold">
+              {game_id}
+            </span>
+            <Clock size={18} className="text-gray-400" />
+          </div>
+
+          <div className="mt-5 inline-block bg-yellow-900/20 border border-yellow-600/40 px-4 py-2 rounded-lg text-sm text-yellow-400">
+            Waiting for players to gather in the mansion...
           </div>
         </div>
 
@@ -240,7 +246,7 @@ export default function GameLobby() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="mystery-card max-w-md mx-auto"
+            className="bg-[#1f1f2e] border border-gray-700 rounded-2xl p-8 max-w-md mx-auto shadow-2xl"
           >
             <h2 className="font-display text-3xl font-semibold mb-6 text-center">Join the Mystery</h2>
             
@@ -287,7 +293,7 @@ export default function GameLobby() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="mystery-card mb-6"
+              className="bg-[#1f1f2e] border border-gray-700 rounded-2xl p-6 mb-6 shadow-xl"
             >
               <div className="flex items-center justify-between mb-6">
                 <h2 className="font-display text-2xl font-semibold flex items-center gap-2">
@@ -351,7 +357,7 @@ export default function GameLobby() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3 }}
-              className="mystery-card text-center"
+              className="bg-[#1f1f2e] border border-gray-700 rounded-2xl p-6 text-center shadow-xl"
             >
               <h3 className="font-display text-2xl font-semibold mb-3">About This Mystery</h3>
               <p className="text-parchment/70 mb-4">{game.theme}</p>

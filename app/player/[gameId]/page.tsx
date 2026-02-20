@@ -13,6 +13,12 @@ import { GameData, Player, Message, Clue } from '@/types';
 import { PHASE_LABELS, getPhaseDescription } from '@/lib/game-utils';
 import type { Vote } from '@/types';
 
+import ChatPanel from '@/components/ChatPanel';
+import RoleCard from '@/components/RoleCard';
+import PlayerCard from '@/components/PlayerCard';
+import ClueBoard from '@/components/ClueBoard';
+import VotePanel from '@/components/VotePanel';
+
 export default function PlayerView() {
   const params = useParams();
   const router = useRouter();
@@ -246,89 +252,49 @@ export default function PlayerView() {
         ))}
       </div>
 
-      {/* ---------------- CHAT ---------------- */}
       {activeTab === 'chat' && (
-        <>
-          <div className="space-y-2">
-            {displayMessages.map(msg => {
-              const isOwn = msg.sender_id === player.id;
-              const isSystem = msg.is_system_message;
-
-              if (isSystem)
-                return <div key={msg.id}>⚡ {msg.content}</div>;
-
-              return (
-                <div key={msg.id}>
-                  <b>{isOwn ? 'You' : 'Player'}:</b> {msg.content}
-                </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
-          </div>
-
-          <form onSubmit={sendMessage}>
-            <input
-              value={messageInput}
-              onChange={e => setMessageInput(e.target.value)}
-              className="border p-2"
-            />
-            <button>Send</button>
-          </form>
-        </>
+        <ChatPanel
+          game={game}
+          player={player}
+          players={players}
+          messages={messages}
+          selectedDM={selectedDM}
+          setSelectedDM={setSelectedDM}
+          messageInput={messageInput}
+          setMessageInput={setMessageInput}
+          sendMessage={sendMessage}
+          phase={game.phase}
+        />
       )}
 
-      {/* ---------------- ROLE ---------------- */}
       {activeTab === 'role' && role && (
-        <div>
-          <h2>{role.name}</h2>
-          <p>{role.role}</p>
-
-          {/* ✅ FIX: safe optional chaining */}
-          {role.secrets?.map((s: string, i: number) => (
-            <p key={i}>🔒 {s}</p>
-          ))}
-        </div>
+        <RoleCard role={role} />
       )}
 
-      {/* ---------------- CLUES ---------------- */}
       {activeTab === 'clues' && (
-        <div className="space-y-2">
-          {clues.length === 0 && <p>No clues revealed yet.</p>}
-          {clues.map(c => (
-            <div key={c.id} className="bg-gray-800 p-2 rounded">
-              📍 {c.location} — {c.text}
-            </div>
-          ))}
-        </div>
+        <ClueBoard clues={clues} />
       )}
 
-      {/* ---------------- PLAYERS ---------------- */}
       {activeTab === 'players' && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {players
             .filter(p => !p.is_host)
             .map(p => (
-              <div key={p.id} className="bg-gray-800 p-2 rounded">
-                {p.name}
-              </div>
+              <PlayerCard key={p.id} player={p} />
             ))}
         </div>
       )}
 
       {game.phase === 'voting' && (
-        <div className="bg-red-900 p-3 rounded">
-          <b>Votes this round:</b>
-          {votes
-            .filter(v => v.round === game.current_round)
-            .map(v => {
-              const accused = players.find(p => p.id === v.accused_id);
-              return (
-                <div key={v.id}>
-                  🔴 Vote against {accused?.name}
-                </div>
-              );
-            })}
-        </div>
+        <VotePanel
+          game={game}
+          player={player}
+          players={players}
+          votes={votes}
+          accusedPlayer={accusedPlayer}
+          setAccusedPlayer={setAccusedPlayer}
+          submitAccusation={submitAccusation}
+        />
       )}
     </div>
   );
