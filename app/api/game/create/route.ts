@@ -64,6 +64,15 @@ export async function POST(request: NextRequest) {
     const safeLocations = mysteryData?.locations ?? [];
     const safeTwists = mysteryData?.twists ?? [];
 
+    // 🚨 HARD FAIL: Do NOT create game if no characters were generated
+    if (!Array.isArray(safeCharacters) || safeCharacters.length === 0) {
+      console.error('AI failed to generate characters:', mysteryData);
+      return NextResponse.json(
+        { error: 'AI failed to generate characters. Game not created.' },
+        { status: 500 }
+      );
+    }
+
     if (!mysteryData?.story || !mysteryData?.victim || !mysteryData?.killer) {
       console.error('AI returned incomplete data. Using fallback values.', mysteryData);
 
@@ -135,14 +144,16 @@ export async function POST(request: NextRequest) {
       avatar: getAvatarForIndex(index),
     }));
 
-    if (rolesData.length) {
-      const { error: rolesError } = await supabase
-        .from('roles')
-        .insert(rolesData);
+    const { error: rolesError } = await supabase
+      .from('roles')
+      .insert(rolesData);
 
-      if (rolesError) {
-        console.error('ROLES INSERT ERROR FULL:', JSON.stringify(rolesError, null, 2));
-      }
+    if (rolesError) {
+      console.error('ROLES INSERT ERROR FULL:', JSON.stringify(rolesError, null, 2));
+      return NextResponse.json(
+        { error: 'Failed to create roles. Game not created.' },
+        { status: 500 }
+      );
     }
 
     /* ------------------------------------------------ */

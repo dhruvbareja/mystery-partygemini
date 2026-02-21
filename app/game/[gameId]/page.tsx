@@ -7,6 +7,9 @@ import { Users, CheckCircle, Clock, Loader } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { GameData, Player } from '@/types';
 
+import AlliancePanel from '@/components/AlliancePanel';
+import AlibiPanel from '@/components/AlibiPanel';
+
 export default function GameLobby() {
   const params = useParams();
   const router = useRouter();
@@ -368,6 +371,119 @@ export default function GameLobby() {
                 )}
               </div>
             </motion.div>
+
+            {game.phase !== 'lobby' && playerId && (
+              <div className="mt-10 space-y-8">
+
+                {/* CHARACTER + ROUND HEADER */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                  {/* CHARACTER CARD */}
+                  <div className="bg-gradient-to-br from-[#1a1a25] to-[#12121a] border border-purple-600/40 rounded-2xl p-6 shadow-2xl space-y-4">
+                    <h3 className="text-lg font-bold text-purple-400">
+                      🎭 Your Character
+                    </h3>
+
+                    <div className="flex items-center gap-4">
+                      <div className="w-20 h-20 rounded-full bg-[#222233] border border-purple-500/40 flex items-center justify-center text-3xl">
+                        {currentPlayer?.avatar || '🎭'}
+                      </div>
+
+                      <div>
+                        <p className="text-xl font-semibold">{currentPlayer?.name}</p>
+                        <p className="text-sm text-gray-400">
+                          Round {game.current_round || 1}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-sm text-gray-300 space-y-2">
+                      <p>
+                        <span className="text-purple-300 font-medium">
+                          Public Bio:
+                        </span>
+                        <br />
+                        Your public persona will be revealed here.
+                      </p>
+
+                      <details className="mt-3 bg-purple-900/20 border border-purple-600/30 rounded-lg p-3">
+                        <summary className="cursor-pointer text-purple-300 font-semibold text-sm">
+                          🔒 Hidden Secrets
+                        </summary>
+                        <p className="text-xs mt-2 text-gray-300">
+                          Your secret motives and truths appear here.
+                        </p>
+                      </details>
+
+                      <div className="mt-3">
+                        <p className="text-purple-300 font-medium text-sm">
+                          🤝 Relationship Hints
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Suspicious ties and hidden tensions will surface here.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ALLIANCES */}
+                  <AlliancePanel
+                    alliances={[]}
+                    players={players}
+                    currentPlayer={currentPlayer}
+                    currentRound={game.current_round || 1}
+                  />
+
+                  {/* ALIBI DECLARATION */}
+                  <div className="bg-gradient-to-br from-[#1a1a25] to-[#12121a] border border-blue-600/40 rounded-2xl p-6 shadow-2xl space-y-4">
+                    <h3 className="text-lg font-bold text-blue-400">
+                      🕰 Declare Your Alibi
+                    </h3>
+
+                    <textarea
+                      placeholder="Where were you during the murder?"
+                      className="w-full bg-[#1f1f2e] border border-blue-600/30 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+
+                    <button className="w-full bg-blue-600 hover:bg-blue-500 transition rounded-xl py-2 text-sm font-semibold">
+                      Submit Alibi
+                    </button>
+                  </div>
+                </div>
+
+                {/* VOTING PANEL */}
+                {game.phase === 'voting' && (
+                  <div className="bg-gradient-to-br from-[#1a1a25] to-[#12121a] border border-red-600/40 rounded-2xl p-6 shadow-2xl">
+                    <h3 className="text-lg font-bold text-red-400 mb-4">
+                      🗳 Cast Your Vote
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {players
+                        .filter(p => !p.is_host)
+                        .map(p => (
+                          <button
+                            key={p.id}
+                            className="bg-[#1f1f2e] border border-red-600/30 hover:bg-red-900/20 rounded-xl p-4 text-left transition"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="text-2xl">
+                                {p.avatar || '🎭'}
+                              </div>
+                              <div>
+                                <p className="font-semibold">{p.name}</p>
+                                <p className="text-xs text-gray-400">
+                                  Vote to accuse
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
 

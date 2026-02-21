@@ -19,6 +19,9 @@ import { supabase } from '@/lib/supabase';
 import { GameData, Player, Clue, Message, Vote, GamePhase } from '@/types';
 import { PHASE_LABELS } from '@/lib/game-utils';
 
+import GlassPanel from '@/components/GlassPanel';
+import SectionHeader from '@/components/SectionHeader';
+
 export default function HostDashboard() {
   const params = useParams();
   const router = useRouter();
@@ -269,133 +272,132 @@ export default function HostDashboard() {
   if (loading) return <div className="p-10">Loading...</div>;
   if (!game) return <div className="p-10">Game not found</div>;
 
-  const nonHostPlayers = players.filter(p => !p.is_host);
-  const unrevealedClues = clues.filter(c => !c.revealed);
-
   return (
-    <div className="p-6 space-y-6">
+  <div className="min-h-screen bg-gradient-to-br from-[#0c0c14] via-[#12121c] to-[#1a1a28] text-gray-200 p-8">
 
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">{game.name}</h1>
-
-        <button onClick={copyJoinLink} className="btn-secondary flex gap-2">
-          {copied ? <Check size={16} /> : <Copy size={16} />}
-          {copied ? 'Copied!' : 'Share Link'}
-        </button>
+    {/* TOP BAR */}
+    <div className="flex justify-between items-center mb-8">
+      <div>
+        <h1 className="text-4xl font-bold tracking-wide text-yellow-400">
+          {game.name}
+        </h1>
+        <p className="text-sm text-gray-400 mt-1">
+          ROUND {game.current_round} · {PHASE_LABELS[game.phase]}
+        </p>
       </div>
 
-      {/* PLAYERS PANEL */}
-      <div className="bg-gray-900 p-4 rounded">
-        <h2 className="text-lg font-bold mb-2">👥 Players</h2>
-        {nonHostPlayers.length === 0 && (
-          <div className="text-sm text-gray-400">No players joined yet</div>
-        )}
-        {nonHostPlayers.map(p => (
-          <div key={p.id} className="flex justify-between text-sm py-1">
-            <span>{p.name}</span>
-            <span>
-              {p.role_id ? "🎭 Assigned" : "⏳ Waiting"}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Controls */}
-      <motion.div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-
+      <div className="flex gap-3">
         {game.phase === 'lobby' ? (
           <button onClick={startGame} className="btn-primary">
-            <Play size={16} /> Start
+            <Play size={16} /> Start Game
           </button>
         ) : (
           <>
             <button onClick={advancePhase} className="btn-primary">
-              <Play size={16} /> Next
+              <Play size={16} /> Next Phase
             </button>
-
             <button onClick={pauseGame} className="btn-secondary">
               <Pause size={16} /> Pause
             </button>
-
-            <button onClick={peekSecret} className="btn-secondary">
-              <Eye size={16} /> Peek
-            </button>
-
-            <button onClick={triggerTwist} className="btn-secondary">
-              <AlertTriangle size={16} /> Twist
-            </button>
           </>
         )}
-      </motion.div>
-
-      {/* STORY PANEL */}
-      <div className="bg-gray-900 p-4 rounded space-y-2">
-        <h2 className="text-xl font-bold">🕯 Story Overview</h2>
-        <p>{game.story}</p>
-
-        <div className="text-sm mt-2 space-y-1">
-          <p><b>Victim:</b> {game.victim}</p>
-          <p><b>Killer:</b> {game.killer}</p>
-          <p><b>Current Round:</b> {game.current_round}</p>
-          <p><b>Phase:</b> {PHASE_LABELS[game.phase]}</p>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className="space-y-2">
-        {messages.slice(0, 10).map(msg => {
-          const sender = players.find(p => p.id === msg.sender_id);
-
-          return (
-            <div key={msg.id} className="text-sm bg-gray-800 p-2 rounded">
-              <b>{sender?.name || 'System'}:</b> {msg.content}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ALL CLUES */}
-      <div className="space-y-2">
-        <h2 className="text-lg font-bold">🧩 Clues</h2>
-
-        {clues.map(c => (
-          <div key={c.id} className="bg-gray-800 p-2 rounded flex justify-between items-center">
-            <span>
-              {c.revealed ? "✅" : "❌"} {c.location}
-            </span>
-
-            {!c.revealed && (
-              <button
-                onClick={() => revealClue(c.id)}
-                className="btn-primary"
-              >
-                Reveal
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* VOTES */}
-      <div className="space-y-2">
-        <h2 className="text-lg font-bold">🗳 Votes</h2>
-
-        {votes.length === 0 && (
-          <div className="text-sm text-gray-400">No votes yet</div>
-        )}
-
-        {votes.map(v => {
-          const voter = players.find(p => p.id === v.voter_id);
-          const accused = players.find(p => p.id === v.accused_id);
-
-          return (
-            <div key={v.id} className="bg-gray-800 p-2 rounded text-sm">
-              {voter?.name || 'Unknown'} → {accused?.name || 'Unknown'}
-            </div>
-          );
-        })}
       </div>
     </div>
-  );
+
+    {/* MAIN GRID */}
+    <div className="grid grid-cols-12 gap-6">
+
+      {/* LEFT COLUMN — PLAYER ROSTER */}
+      <GlassPanel className="col-span-3 space-y-4" hover>
+        <SectionHeader>Player Roster</SectionHeader>
+
+        {players.filter(p => !p.is_host).map(p => (
+          <div
+            key={p.id}
+            className="glass-panel glass-panel-hover p-3 rounded-xl"
+          >
+            <div className="font-semibold">{p.name}</div>
+            <div className="text-xs text-gray-400">
+              {p.role_id ? 'Role Assigned' : 'Waiting'}
+            </div>
+          </div>
+        ))}
+      </GlassPanel>
+
+      {/* CENTER COLUMN — LIVE DISCUSSION */}
+      <GlassPanel className="col-span-6 flex flex-col" hover>
+        <SectionHeader>Current Discussions</SectionHeader>
+
+        <div className="flex-1 space-y-3 overflow-y-auto">
+          {messages.slice(0, 20).map(msg => {
+            const sender = players.find(p => p.id === msg.sender_id);
+            return (
+              <div
+                key={msg.id}
+                className={`chat-bubble ${
+                  msg.is_system_message
+                    ? 'chat-bubble-system'
+                    : 'chat-bubble-other'
+                }`}
+              >
+                <span className="font-semibold">
+                  {sender?.name || 'System'}:
+                </span>{' '}
+                {msg.content}
+              </div>
+            );
+          })}
+        </div>
+      </GlassPanel>
+
+      {/* RIGHT COLUMN — CONTROL PANELS */}
+      <div className="col-span-3 space-y-6">
+
+        {/* STORY SNAPSHOT */}
+        <GlassPanel hover>
+          <SectionHeader>Story Overview</SectionHeader>
+          <p className="text-sm text-gray-400">{game.story}</p>
+        </GlassPanel>
+
+        {/* CLUES */}
+        <GlassPanel hover>
+          <SectionHeader>Clues</SectionHeader>
+          {clues.map(c => (
+            <div
+              key={c.id}
+              className="glass-panel glass-panel-hover p-2 rounded-lg text-xs mb-2 flex justify-between"
+            >
+              <span>{c.location}</span>
+              {!c.revealed && (
+                <button
+                  onClick={() => revealClue(c.id)}
+                  className="text-yellow-400 text-xs"
+                >
+                  Reveal
+                </button>
+              )}
+            </div>
+          ))}
+        </GlassPanel>
+
+        {/* VOTES */}
+        <GlassPanel hover>
+          <SectionHeader>Votes</SectionHeader>
+          {votes.length === 0 && (
+            <div className="text-xs text-gray-500">No votes yet</div>
+          )}
+          {votes.map(v => {
+            const voter = players.find(p => p.id === v.voter_id);
+            const accused = players.find(p => p.id === v.accused_id);
+            return (
+              <div key={v.id} className="text-xs mb-1">
+                {voter?.name} → {accused?.name}
+              </div>
+            );
+          })}
+        </GlassPanel>
+      </div>
+    </div>
+  </div>
+);
 }

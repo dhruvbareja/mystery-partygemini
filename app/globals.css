@@ -7,6 +7,14 @@
 :root {
   --font-display: 'Playfair Display', serif;
   --font-body: 'Crimson Text', serif;
+
+  --color-bg-deep: #0c0c14;
+  --color-bg-mid: #12121c;
+  --color-bg-light: #1a1a28;
+  --color-gold: #d4af37;
+  --color-gold-soft: rgba(212, 175, 55, 0.4);
+  --color-panel: rgba(255, 255, 255, 0.04);
+  --color-border: rgba(255, 255, 255, 0.08);
 }
 
 * {
@@ -17,7 +25,9 @@ body {
   margin: 0;
   padding: 0;
   font-family: var(--font-body);
-  background: linear-gradient(135deg, #0f0a1e 0%, #1a1230 50%, #2d1b3d 100%);
+  background: radial-gradient(circle at 20% 20%, rgba(212,175,55,0.05), transparent 40%),
+              radial-gradient(circle at 80% 0%, rgba(139,0,0,0.08), transparent 40%),
+              linear-gradient(135deg, var(--color-bg-deep) 0%, var(--color-bg-mid) 50%, var(--color-bg-light) 100%);
   color: #f4f1e8;
   min-height: 100vh;
   overflow-x: hidden;
@@ -34,7 +44,8 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(212, 175, 55, 0.5);
+  background: linear-gradient(180deg, #d4af37, #8B0000);
+  box-shadow: 0 0 10px rgba(212,175,55,0.4);
   border-radius: 4px;
 }
 
@@ -46,6 +57,82 @@ body {
 .backdrop-blur-glass {
   backdrop-filter: blur(12px);
   background: rgba(255, 255, 255, 0.05);
+}
+
+/* Cinematic glass panel */
+.glass-panel {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  backdrop-filter: blur(18px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    0 10px 40px rgba(0,0,0,0.5);
+}
+
+.glass-panel-hover {
+  transition: all 0.3s ease;
+}
+
+.glass-panel-hover:hover {
+  border-color: var(--color-gold-soft);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    0 15px 50px rgba(0,0,0,0.6);
+  transform: translateY(-4px);
+}
+
+/* Section header style */
+.section-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--color-gold);
+  text-transform: uppercase;
+}
+
+/* Subtle glow border utility */
+.gold-border-glow {
+  border: 1px solid var(--color-gold-soft);
+  box-shadow: 0 0 20px rgba(212,175,55,0.15);
+}
+
+/* Chat bubble base */
+.chat-bubble {
+  padding: 0.75rem 1rem;
+  border-radius: 14px;
+  max-width: 75%;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.chat-bubble-self {
+  background: linear-gradient(135deg, rgba(139,0,0,0.4), rgba(212,175,55,0.2));
+  align-self: flex-end;
+}
+
+.chat-bubble-other {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.chat-bubble-system {
+  background: rgba(212,175,55,0.1);
+  border: 1px solid rgba(212,175,55,0.3);
+  font-style: italic;
+}
+
+/* Suspicion meter */
+.suspicion-bar {
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.1);
+  overflow: hidden;
+}
+
+.suspicion-fill {
+  height: 100%;
+  background: linear-gradient(to right, #d4af37, #ff6b6b);
 }
 
 /* Mystery card effect */
