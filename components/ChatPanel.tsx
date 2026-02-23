@@ -42,8 +42,16 @@ export default function ChatPanel({
 
       {/* CHANNEL HEADER */}
       <div className="flex justify-between items-center mb-3">
-        <div className="text-sm font-semibold tracking-wide text-purple-400">
-          {selectedDM ? "🤝 Alliance Channel" : "🌐 Global Channel"}
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold tracking-wide text-purple-400">
+            {selectedDM ? "🤝 Alliance Channel" : "🌐 Global Channel"}
+          </span>
+
+          {selectedDM && (
+            <span className="text-[10px] px-2 py-0.5 bg-green-700 text-white rounded-full animate-pulse">
+              ALLIANCE
+            </span>
+          )}
         </div>
 
         {selectedDM && (
@@ -102,9 +110,17 @@ export default function ChatPanel({
               return (
                 <motion.div
                   key={msg.id}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="text-center text-yellow-400 text-xs tracking-wide bg-yellow-900/20 border border-yellow-600/30 rounded-lg py-2 shadow-[0_0_10px_rgba(255,215,0,0.3)]"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{
+                    opacity: 1,
+                    scale: [1, 1.03, 1],
+                  }}
+                  transition={{
+                    duration: 1.2,
+                    repeat: Infinity,
+                    repeatType: "reverse"
+                  }}
+                  className="text-center text-yellow-400 text-xs tracking-wide bg-yellow-900/20 border border-yellow-500 rounded-lg py-2 shadow-[0_0_20px_rgba(255,215,0,0.5)]"
                 >
                   ⚡ {msg.content}
                 </motion.div>
@@ -120,7 +136,7 @@ export default function ChatPanel({
                 className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'}`}
               >
                 {!isOwn && (
-                  <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-600 flex items-center justify-center text-sm">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 border border-purple-500 flex items-center justify-center text-sm shadow-md">
                     {sender?.avatar || '🎭'}
                   </div>
                 )}
@@ -143,14 +159,18 @@ export default function ChatPanel({
                   <div>{msg.content}</div>
 
                   {selectedDM && (
-                    <div className="text-[9px] mt-1 opacity-60">
-                      Alliance DM
+                    <div className="text-[9px] mt-2 inline-block px-2 py-0.5 bg-green-800 text-green-200 rounded-full">
+                      🤝 Alliance DM
                     </div>
                   )}
+
+                  <div className="text-[9px] mt-1 opacity-50 text-right">
+                    {new Date(msg.created_at).toLocaleTimeString()}
+                  </div>
                 </div>
 
                 {isOwn && (
-                  <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-600 flex items-center justify-center text-sm">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-700 to-blue-900 border border-blue-400 flex items-center justify-center text-sm shadow-md">
                     {player.avatar || '🎭'}
                   </div>
                 )}

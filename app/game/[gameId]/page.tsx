@@ -9,6 +9,7 @@ import { GameData, Player } from '@/types';
 
 import AlliancePanel from '@/components/AlliancePanel';
 import AlibiPanel from '@/components/AlibiPanel';
+import GlassPanel from '@/components/GlassPanel';
 
 export default function GameLobby() {
   const params = useParams();
@@ -22,6 +23,15 @@ export default function GameLobby() {
   const [playerName, setPlayerName] = useState('');
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [error, setError] = useState('');
+
+  const [showSecrets, setShowSecrets] = useState(false);
+  const [showVoteModal, setShowVoteModal] = useState(false);
+  const [selectedVote, setSelectedVote] = useState<string | null>(null);
+  const [newAllianceName, setNewAllianceName] = useState('');
+  const [alibiText, setAlibiText] = useState('');
+  const [submittingAlibi, setSubmittingAlibi] = useState(false);
+  const [alliances, setAlliances] = useState<any[]>([]);
+  const [aiEvents, setAiEvents] = useState<any[]>([]);
 
   useEffect(() => {
     console.log('LOBBY STATE', {
@@ -84,6 +94,49 @@ export default function GameLobby() {
       if (playersError) {
         console.warn('Players fetch failed (non-fatal)', playersError);
       }
+
+      // Fetch alliances
+      const { data: allianceData } = await supabase
+        .from('alliances')
+        .select('*')
+        .eq('game_id', game_id);
+
+      const { data: allianceMembers } = await supabase
+        .from('alliance_members')
+        .select('*');
+
+      if (allianceData) {
+        const enriched = allianceData.map(a => ({
+          ...a,
+          members: allianceMembers
+            ?.filter(m => m.alliance_id === a.id)
+            .map(m => m.player_id) || [],
+        }));
+        setAlliances(enriched);
+      }
+
+      // Fetch AI/system events from logs + system messages
+      const { data: logs } = await supabase
+        .from('game_logs')
+        .select('*')
+        .eq('game_id', game_id)
+        .order('created_at', { ascending: false });
+
+      const { data: systemMessages } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('game_id', game_id)
+        .eq('is_system_message', true)
+        .order('created_at', { ascending: false });
+
+      const combinedEvents = [
+        ...(logs || []),
+        ...(systemMessages || [])
+      ].sort((a: any, b: any) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      setAiEvents(combinedEvents);
 
       setGame(gameData);
       setPlayers(playersData ?? []);
@@ -186,6 +239,90 @@ export default function GameLobby() {
       .update({ is_ready: !player?.is_ready })
       .eq('id', playerId);
     await loadGameData();
+  };
+
+  const handleSubmitAlibi = async () => {
+    if (!playerId || !alibiText.trim()) return;
+
+    try {
+      setSubmittingAlibi(true);
+
+      const response = await fetch('/api/game/alibi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId: game_id,
+          playerId,
+          alibi: alibiText.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to submit alibi');
+      }
+
+      setAlibiText('');
+    } catch (err: any) {
+      console.error('Alibi submit error', err);
+      setError(err.message);
+    } finally {
+      setSubmittingAlibi(false);
+    }
+  };
+
+  const handleCreateAlliance = async () => {
+    if (!playerId || !newAllianceName.trim()) return;
+
+    try {
+      const res = await fetch('/api/game/alliance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'create',
+          gameId: game_id,
+          playerId,
+          name: newAllianceName.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Alliance creation failed');
+        return;
+      }
+
+      setNewAllianceName('');
+      await loadGameData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleJoinAlliance = async (allianceId: string) => {
+    if (!playerId) return;
+
+    try {
+      const res = await fetch('/api/game/alliance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'join',
+          allianceId,
+          playerId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Join failed');
+        return;
+      }
+
+      await loadGameData();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   if (loading) {
@@ -342,6 +479,7 @@ export default function GameLobby() {
                       <span className="text-4xl">{player.avatar}</span>
                       <div className="flex-1">
                         <p className="font-semibold text-lg">{player.name}</p>
+
                         <p className="text-sm text-parchment/60">
                           {player.is_ready ? (
                             <span className="text-green-400">✓ Ready</span>
@@ -349,6 +487,13 @@ export default function GameLobby() {
                             'Not ready'
                           )}
                         </p>
+
+                        {/* Public Alibi Display */}
+                        {(player as any).alibi && (
+                          <div className="mt-2 bg-blue-900/20 border border-blue-500/30 rounded-lg p-2 text-xs text-blue-300">
+                            🕰 <span className="font-semibold">Alibi:</span> {(player as any).alibi}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </motion.div>
@@ -372,113 +517,222 @@ export default function GameLobby() {
               </div>
             </motion.div>
 
+            {/* AI SURVEILLANCE FEED */}
+            <GlassPanel title="🧠 AI Surveillance Feed" glow>
+              <div className="max-h-72 overflow-y-auto space-y-3 pr-2">
+                {aiEvents.length === 0 && (
+                  <div className="text-gray-500 text-sm">
+                    No AI activity yet...
+                  </div>
+                )}
+
+                {aiEvents.map((event: any, index: number) => (
+                  <div
+                    key={event.id || index}
+                    className="bg-black/30 border border-gold/20 rounded-lg p-3 text-xs space-y-1"
+                  >
+                    <div className="text-gold text-[10px] uppercase tracking-wide">
+                      {event.type || (event.is_system_message ? 'system_event' : 'log')}
+                    </div>
+
+                    <div className="text-gray-300 break-words">
+                      {event.content || event.details}
+                    </div>
+
+                    <div className="text-[10px] text-gray-500">
+                      {new Date(event.created_at).toLocaleTimeString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </GlassPanel>
+
             {game.phase !== 'lobby' && playerId && (
               <div className="mt-10 space-y-8">
 
-                {/* CHARACTER + ROUND HEADER */}
+                {/* TOP GRID */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                   {/* CHARACTER CARD */}
-                  <div className="bg-gradient-to-br from-[#1a1a25] to-[#12121a] border border-purple-600/40 rounded-2xl p-6 shadow-2xl space-y-4">
-                    <h3 className="text-lg font-bold text-purple-400">
-                      🎭 Your Character
-                    </h3>
+                  <div className="bg-gradient-to-br from-[#1b1b2a] to-[#12121a] border border-purple-500/40 rounded-2xl p-6 shadow-2xl space-y-5 relative">
+
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-bold text-purple-400">
+                        🎭 Character Profile
+                      </h3>
+
+                      <button
+                        onClick={() => setShowSecrets(!showSecrets)}
+                        className="text-xs bg-purple-900/30 border border-purple-500/40 px-3 py-1 rounded-lg hover:bg-purple-900/50 transition"
+                      >
+                        {showSecrets ? 'Hide Secrets' : 'Reveal Secrets'}
+                      </button>
+                    </div>
 
                     <div className="flex items-center gap-4">
-                      <div className="w-20 h-20 rounded-full bg-[#222233] border border-purple-500/40 flex items-center justify-center text-3xl">
+                      <div className="w-20 h-20 rounded-full bg-[#222233] border border-purple-500/40 flex items-center justify-center text-3xl shadow-lg">
                         {currentPlayer?.avatar || '🎭'}
                       </div>
 
                       <div>
-                        <p className="text-xl font-semibold">{currentPlayer?.name}</p>
+                        <p className="text-xl font-semibold">
+                          {currentPlayer?.name}
+                        </p>
                         <p className="text-sm text-gray-400">
                           Round {game.current_round || 1}
                         </p>
                       </div>
                     </div>
 
-                    <div className="text-sm text-gray-300 space-y-2">
-                      <p>
-                        <span className="text-purple-300 font-medium">
-                          Public Bio:
-                        </span>
-                        <br />
-                        Your public persona will be revealed here.
-                      </p>
-
-                      <details className="mt-3 bg-purple-900/20 border border-purple-600/30 rounded-lg p-3">
-                        <summary className="cursor-pointer text-purple-300 font-semibold text-sm">
-                          🔒 Hidden Secrets
-                        </summary>
-                        <p className="text-xs mt-2 text-gray-300">
-                          Your secret motives and truths appear here.
+                    <div className="text-sm text-gray-300 space-y-3">
+                      <div>
+                        <p className="text-purple-300 font-medium text-sm">
+                          Public Persona
                         </p>
-                      </details>
+                        <p className="text-gray-400 text-xs">
+                          Your visible background and personality.
+                        </p>
+                      </div>
 
-                      <div className="mt-3">
+                      {showSecrets && (
+                        <div className="bg-purple-900/20 border border-purple-600/40 rounded-xl p-3 animate-pulse">
+                          <p className="text-xs text-purple-300 font-semibold">
+                            🔒 Hidden Secrets
+                          </p>
+                          <p className="text-xs text-gray-300 mt-1">
+                            Your true motives and private truths appear here.
+                          </p>
+                        </div>
+                      )}
+
+                      <div>
                         <p className="text-purple-300 font-medium text-sm">
                           🤝 Relationship Hints
                         </p>
                         <p className="text-xs text-gray-400">
-                          Suspicious ties and hidden tensions will surface here.
+                          Suspicious ties and hidden tensions will appear here.
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  {/* ALLIANCES */}
                   <AlliancePanel
-                    alliances={[]}
+                    alliances={alliances}
                     players={players}
                     currentPlayer={currentPlayer}
                     currentRound={game.current_round || 1}
+                    onCreateAlliance={handleCreateAlliance}
+                    onJoinAlliance={handleJoinAlliance}
                   />
 
-                  {/* ALIBI DECLARATION */}
-                  <div className="bg-gradient-to-br from-[#1a1a25] to-[#12121a] border border-blue-600/40 rounded-2xl p-6 shadow-2xl space-y-4">
+                  {/* ALIBI PANEL */}
+                  <div className="bg-gradient-to-br from-[#1b1b2a] to-[#12121a] border border-blue-500/40 rounded-2xl p-6 shadow-2xl space-y-4">
                     <h3 className="text-lg font-bold text-blue-400">
                       🕰 Declare Your Alibi
                     </h3>
 
                     <textarea
+                      value={alibiText}
+                      onChange={(e) => setAlibiText(e.target.value)}
                       placeholder="Where were you during the murder?"
-                      className="w-full bg-[#1f1f2e] border border-blue-600/30 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full bg-[#1f1f2e] border border-blue-500/30 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
 
-                    <button className="w-full bg-blue-600 hover:bg-blue-500 transition rounded-xl py-2 text-sm font-semibold">
-                      Submit Alibi
+                    <button
+                      onClick={handleSubmitAlibi}
+                      disabled={submittingAlibi || !alibiText.trim()}
+                      className="w-full bg-blue-600 hover:bg-blue-500 transition rounded-xl py-2 text-sm font-semibold disabled:opacity-50"
+                    >
+                      {submittingAlibi ? 'Submitting...' : 'Submit Alibi'}
                     </button>
                   </div>
                 </div>
 
-                {/* VOTING PANEL */}
+                {/* VOTING MODAL TRIGGER */}
                 {game.phase === 'voting' && (
-                  <div className="bg-gradient-to-br from-[#1a1a25] to-[#12121a] border border-red-600/40 rounded-2xl p-6 shadow-2xl">
-                    <h3 className="text-lg font-bold text-red-400 mb-4">
-                      🗳 Cast Your Vote
-                    </h3>
+                  <div className="text-center">
+                    <button
+                      onClick={() => setShowVoteModal(true)}
+                      className="bg-red-600 hover:bg-red-500 transition px-6 py-3 rounded-xl font-semibold shadow-lg"
+                    >
+                      🗳 Open Voting Panel
+                    </button>
+                  </div>
+                )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {players
-                        .filter(p => !p.is_host)
-                        .map(p => (
-                          <button
-                            key={p.id}
-                            className="bg-[#1f1f2e] border border-red-600/30 hover:bg-red-900/20 rounded-xl p-4 text-left transition"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="text-2xl">
+                {/* VOTING MODAL */}
+                {showVoteModal && (
+                  <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+                    <div className="bg-[#161622] border border-red-600/40 rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-5">
+
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-bold text-red-400">
+                          Cast Your Vote
+                        </h3>
+                        <button
+                          onClick={() => setShowVoteModal(false)}
+                          className="text-gray-400 hover:text-white"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div className="space-y-3 max-h-64 overflow-y-auto">
+                        {players
+                          .filter(p => !p.is_host && p.id !== playerId)
+                          .map(p => (
+                            <button
+                              key={p.id}
+                              onClick={() => setSelectedVote(p.id)}
+                              className={`w-full flex items-center gap-3 p-3 rounded-xl border transition ${
+                                selectedVote === p.id
+                                  ? 'bg-red-900/30 border-red-500'
+                                  : 'bg-[#1f1f2e] border-red-500/30 hover:bg-red-900/20'
+                              }`}
+                            >
+                              <span className="text-2xl">
                                 {p.avatar || '🎭'}
-                              </div>
-                              <div>
-                                <p className="font-semibold">{p.name}</p>
-                                <p className="text-xs text-gray-400">
-                                  Vote to accuse
-                                </p>
-                              </div>
-                            </div>
-                          </button>
-                        ))}
+                              </span>
+                              <span className="font-semibold">{p.name}</span>
+                            </button>
+                          ))}
+                      </div>
+                      <button
+                        onClick={async () => {
+                          if (!selectedVote || !playerId) return;
+
+                          try {
+                            const res = await fetch('/api/game/vote', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                gameId: game_id,
+                                voterId: playerId,
+                                accusedId: selectedVote,
+                              }),
+                            });
+
+                            const data = await res.json();
+
+                            if (!res.ok) {
+                              alert(data.error || 'Vote failed');
+                              return;
+                            }
+
+                            // Close modal and refresh state
+                            setShowVoteModal(false);
+                            setSelectedVote(null);
+                            await loadGameData();
+                          } catch (err) {
+                            console.error('Vote error:', err);
+                            alert('Vote submission failed');
+                          }
+                        }}
+                        disabled={!selectedVote}
+                        className="w-full bg-red-600 hover:bg-red-500 transition rounded-xl py-2 font-semibold disabled:opacity-50"
+                      >
+                        Confirm Vote
+                      </button>
                     </div>
                   </div>
                 )}

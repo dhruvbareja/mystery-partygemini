@@ -67,6 +67,9 @@ export type Player = {
 
   suspicion_level: number;
 
+  // NEW: public claimed alibi (stored in players table)
+  alibi?: string | null;
+
   joined_at?: string;
   last_active?: string;
 };
@@ -83,7 +86,12 @@ export type PlayerRole = {
 
   secrets: string[];
   motive: string | null;
+  // TRUE location (hidden truth)
   alibi: string;
+
+  // FUTURE: optional separated true location
+  true_location?: string;
+
   personality: string;
 
   is_killer: boolean;
@@ -157,4 +165,26 @@ export type Alliance = {
 
 export type AllianceMessage = Message & {
   message_type: 'alliance';
+};
+
+
+/* ---------------- GAME LOG ---------------- */
+
+export type GameLog = {
+  id: string;
+  game_id: string;
+
+  type:
+    | 'suspicion_update'
+    | 'suspicion_decay'
+    | 'contradiction_detected'
+    | 'voting_spike'
+    | 'alliance_created'
+    | 'round_advanced'
+    | string;
+
+  player_id: string | null;
+  details: string;
+
+  created_at: string;
 };

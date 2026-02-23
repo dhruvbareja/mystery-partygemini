@@ -64,13 +64,21 @@ export async function POST(request: NextRequest) {
     const safeLocations = mysteryData?.locations ?? [];
     const safeTwists = mysteryData?.twists ?? [];
 
-    // 🚨 HARD FAIL: Do NOT create game if no characters were generated
-    if (!Array.isArray(safeCharacters) || safeCharacters.length === 0) {
-      console.error('AI failed to generate characters:', mysteryData);
-      return NextResponse.json(
-        { error: 'AI failed to generate characters. Game not created.' },
-        { status: 500 }
-      );
+    // 🔥 SAFE FALLBACK: If AI fails to generate characters, auto-generate them
+    let finalCharacters = safeCharacters;
+
+    if (!Array.isArray(finalCharacters) || finalCharacters.length === 0) {
+      console.warn('AI failed to generate characters. Using fallback generator.');
+
+      finalCharacters = playerNames.map((name: string, index: number) => ({
+        name,
+        role: 'Suspect',
+        secrets: [`${name} is hiding something.`],
+        motive: 'Unknown motive',
+        true_location: locations[index % locations.length] || 'Unknown location',
+        public_alibi: 'I was somewhere else that night.',
+        personality: 'Calm but observant'
+      }));
     }
 
     if (!mysteryData?.story || !mysteryData?.victim || !mysteryData?.killer) {
@@ -131,16 +139,28 @@ export async function POST(request: NextRequest) {
     /* Create roles (FIXED VERSION)                     */
     /* ------------------------------------------------ */
 
-    const rolesData = safeCharacters.map((char: any, index: number) => ({
+    const rolesData = finalCharacters.map((char: any, index: number) => ({
       id: nanoid(),
       game_id: game_id,
       name: char?.name ?? `Player ${index + 1}`,
-      role: char?.role ?? 'Student',
-      secrets: Array.isArray(char?.secrets) ? char.secrets : [],   // 🔥 FIX
+      role: char?.role ?? 'Suspect',
+
+      // Always ensure array (DB requires TEXT[] NOT NULL)
+      secrets: Array.isArray(char?.secrets) ? char.secrets : [],
+
       motive: char?.motive ?? null,
-      alibi: char?.alibi ?? '',
-      personality: char?.personality ?? '',
-      is_killer: char?.name === mysteryData?.killer,
+
+      // 🔒 Hidden true location (used for contradiction engine)
+      true_location: char?.true_location ?? char?.alibi ?? 'Unknown location',
+
+      // 🎭 Public alibi players will see
+      alibi: char?.public_alibi ?? 'I was somewhere else that night.',
+
+      personality: char?.personality ?? 'Composed and guarded',
+
+      // DO NOT hard-assign killer anymore (dynamic system later)
+      is_killer: false,
+
       avatar: getAvatarForIndex(index),
     }));
 

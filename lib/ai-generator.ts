@@ -5,20 +5,44 @@ export async function generateMysteryGame(
 ): Promise<AIGenerationOutput> {
 
   const prompt = `
-You are an API that outputs ONLY valid JSON.
-Return EXACT JSON only.
+You are a JSON API generator.
+
+IMPORTANT RULES:
+- Output ONLY valid raw JSON.
+- Do NOT use markdown.
+- Do NOT wrap in \`\`\`json.
+- Do NOT explain anything.
+- No trailing commas.
+- Ensure all arrays are valid JSON arrays.
+
+Return STRICTLY this JSON format:
 
 {
-  "story": "",
-  "victim": "",
-  "killer": "",
-  "characters": [],
-  "locations": [],
-  "clues": [],
-  "timeline": [],
-  "twists": [],
-  "evidence": [],
-  "endingText": ""
+  "story": "string",
+  "victim": "string",
+  "killer": "string",
+  "characters": [
+    {
+      "name": "string",
+      "role": "string",
+      "secrets": ["string"],
+      "motive": "string",
+      "true_location": "string",
+      "public_alibi": "string",
+      "personality": "string"
+    }
+  ],
+  "locations": ["string"],
+  "clues": [
+    {
+      "text": "string",
+      "location": "string"
+    }
+  ],
+  "timeline": ["string"],
+  "twists": ["string"],
+  "evidence": ["string"],
+  "endingText": "string"
 }
 
 Players: ${input.playerNames.join(", ")}
@@ -34,8 +58,10 @@ Notes: ${input.customNotes ?? ""}
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'qwen2.5:1.5b',
+      model: 'phi3:mini',
       prompt,
+      temperature: 0.4,
+      top_p: 0.9,
       stream: false
     }),
     signal: controller.signal
@@ -66,10 +92,11 @@ Notes: ${input.customNotes ?? ""}
     };
   }
 
-  // Remove markdown fences
+  // Aggressive cleanup
   raw = raw
-    .replace(/```json/g, '')
+    .replace(/```json/gi, '')
     .replace(/```/g, '')
+    .replace(/\n/g, ' ')
     .trim();
 
   const start = raw.indexOf('{');
