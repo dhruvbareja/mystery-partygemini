@@ -149,6 +149,30 @@ export type Vote = {
 };
 
 
+
+e/* ---------------- ROLE ---------------- */
+/* ---------------- ROLE ---------------- */
+
+export type PlayerRole = {
+  id: string;
+  game_id: string;
+
+  name: string;
+  role: string;
+
+  secrets: string[];
+  motive: string | null;
+  alibi: string;
+  personality: string;
+  
+  // ✨ These are the two fields causing the red line!
+  backstory: string | null; 
+  objective: string | null; 
+
+  is_killer: boolean;
+
+  avatar: string;
+};
 /* ---------------- ALLIANCE ---------------- */
 
 export type Alliance = {

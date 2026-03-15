@@ -1,3 +1,5 @@
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+
 // Define the types directly here to avoid import errors
 export interface AIGenerationInput {
   gameName?: string;
@@ -14,23 +16,24 @@ export interface AIGenerationOutput {
   characters: {
     name: string;
     role: string;
+    backstory: string; // ✨ Extracted into its own field
     personality: string;
     motive: string;
     alibi: string;
+    objective: string; // ✨ Extracted into its own field
     secrets: string[];
   }[];
   locations: string[];
   clues: {
     text: string;
     location: string;
+    significance: string;
   }[];
   timeline: string[];
   twists: string[];
   evidence: string[];
   endingText: string;
 }
-
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
 // Initialize the Gemini SDK
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -39,7 +42,7 @@ export async function generateMysteryGame(
   input: AIGenerationInput
 ): Promise<AIGenerationOutput> {
 
-  // We are now using the powerful gemini-2.5-flash model your key supports
+  // Using the powerful gemini-2.5-flash model
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.5-flash',
     generationConfig: {
@@ -47,9 +50,9 @@ export async function generateMysteryGame(
       responseSchema: {
         type: SchemaType.OBJECT,
         properties: {
-          story: { type: SchemaType.STRING, description: "A gripping 2-paragraph setup of the murder." },
-          victim: { type: SchemaType.STRING },
-          killer: { type: SchemaType.STRING, description: "MUST be one of the provided players." },
+          story: { type: SchemaType.STRING, description: "A gripping, highly detailed 3-paragraph setup of the murder and the world." },
+          victim: { type: SchemaType.STRING, description: "Full name and brief description of the person murdered." },
+          killer: { type: SchemaType.STRING, description: "MUST be exactly one of the provided players." },
           characters: {
             type: SchemaType.ARRAY,
             items: {
@@ -57,13 +60,18 @@ export async function generateMysteryGame(
               properties: {
                 name: { type: SchemaType.STRING },
                 role: { type: SchemaType.STRING },
-                personality: { type: SchemaType.STRING },
-                motive: { type: SchemaType.STRING },
-                alibi: { type: SchemaType.STRING },
-                secrets: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
+                backstory: { type: SchemaType.STRING, description: "Their rich history and connection to the victim (1-2 paragraphs)." },
+                personality: { type: SchemaType.STRING, description: "How they act, speak, and carry themselves." },
+                motive: { type: SchemaType.STRING, description: "A dark, specific reason they would want the victim dead." },
+                alibi: { type: SchemaType.STRING, description: "Where they claim they were. Must be detailed but slightly flawed." },
+                objective: { type: SchemaType.STRING, description: "A secret side-quest or alliance they are trying to achieve tonight." },
+                secrets: { 
+                  type: SchemaType.ARRAY, 
+                  items: { type: SchemaType.STRING },
+                  description: "2 to 3 very dark secrets they are hiding."
+                }
               },
-              // Forcing Gemini to generate these exact fields prevents DB errors
-              required: ["name", "role", "personality", "motive", "alibi", "secrets"]
+              required: ["name", "role", "backstory", "personality", "motive", "alibi", "objective", "secrets"]
             }
           },
           locations: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
@@ -72,16 +80,17 @@ export async function generateMysteryGame(
             items: {
               type: SchemaType.OBJECT,
               properties: {
-                text: { type: SchemaType.STRING },
-                location: { type: SchemaType.STRING }
+                text: { type: SchemaType.STRING, description: "The physical clue found." },
+                location: { type: SchemaType.STRING },
+                significance: { type: SchemaType.STRING, description: "A sentence explaining why it is significant to the case." }
               },
-              required: ["text", "location"]
+              required: ["text", "location", "significance"]
             }
           },
           timeline: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
           twists: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
           evidence: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
-          endingText: { type: SchemaType.STRING }
+          endingText: { type: SchemaType.STRING, description: "The dramatic script to read at the end." }
         },
         required: ["story", "victim", "killer", "characters", "locations", "clues", "timeline", "twists", "evidence", "endingText"]
       }
@@ -89,25 +98,26 @@ export async function generateMysteryGame(
   });
 
   const prompt = `
-  You are a master mystery writer. Create a logical, engaging murder mystery game.
+  You are an elite, award-winning murder mystery writer. Create a deeply interwoven, logical, and thrilling party game.
   
   Players: ${input.playerNames.join(", ")}
   Locations: ${input.locations.join(", ")}
   Theme: ${input.theme}
   Notes: ${input.customNotes ?? "None"}
 
-  RULES:
-  1. The "killer" MUST be exactly one of the players listed above.
-  2. Every character needs a distinct motive, alibi, personality, and at least 2 dark secrets.
-  3. Clues must logically point towards the killer's timeline, with a few red herrings pointing to innocent characters.
-  4. Ensure clues are placed ONLY in the provided locations.
+  WRITING RULES & MECHANICS:
+  1. The "killer" MUST be exactly one of the players listed above. Do not invent a new character.
+  2. WEB OF LIES: Every innocent character must still have a strong motive to kill the victim, and a flawed alibi. 
+  3. DEEP LORE: Fill out the backstory, personality, and objective fields thoroughly for each character to create alliances and side-quests.
+  4. CLUE LOGIC: Clues must logically point towards the killer's timeline, but include 2 or 3 "red herring" clues that point to the dirty secrets of the innocent characters.
+  5. LOCATION STRICTNESS: Only place clues in the exact locations provided.
   `;
 
   try {
     const result = await model.generateContent(prompt);
     const text = result.response.text();
     
-    // Because we used responseSchema, this will parse flawlessly without regex hacks
+    // Gemini's Structured Outputs guarantees this will parse safely
     const parsed = JSON.parse(text);
 
     return {
@@ -123,7 +133,6 @@ export async function generateMysteryGame(
       endingText: parsed.endingText
     };
   } catch (error) {
-    // If it fails, this will log the exact reason to your Next.js terminal
     console.error("GEMINI API ERROR:", error);
     throw new Error('AI failed to generate the mystery.');
   }

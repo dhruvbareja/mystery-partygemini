@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase';
-import { GameData, Player, Clue, Message, Vote, GamePhase } from '@/types';
+import { GameData, Player, Clue, Message, Vote, GamePhase, PlayerRole } from '@/types';
 import { PHASE_LABELS } from '@/lib/game-utils';
 
 import GlassPanel from '@/components/GlassPanel';
@@ -29,6 +29,7 @@ export default function HostDashboard() {
 
   const [game, setGame] = useState<GameData | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [roles, setRoles] = useState<PlayerRole[]>([]); // ✨ NEW: Fetch roles for the cheat sheet
   const [clues, setClues] = useState<Clue[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [votes, setVotes] = useState<Vote[]>([]);
@@ -61,6 +62,12 @@ export default function HostDashboard() {
 
     const { data: playersData } = await supabase
       .from('players')
+      .select('*')
+      .eq('game_id', game_id);
+
+    // ✨ NEW: Load the roles to see backstories and objectives
+    const { data: rolesData } = await supabase
+      .from('roles')
       .select('*')
       .eq('game_id', game_id);
 
@@ -102,6 +109,7 @@ export default function HostDashboard() {
 
     setGame(gameData ?? null);
     setPlayers(playersData || []);
+    setRoles(rolesData || []); // Set the roles
     setClues(cluesData || []);
     setMessages(messagesData || []);
     setVotes(votesData || []);
@@ -120,6 +128,11 @@ export default function HostDashboard() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'players', filter: `game_id=eq.${game_id}` },
         loadGameData
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'roles', filter: `game_id=eq.${game_id}` },
+        loadGameData // Track changes to roles too
       )
       .on(
         'postgres_changes',
@@ -298,8 +311,8 @@ export default function HostDashboard() {
 
   /* ---------------- UI ---------------- */
 
-  if (loading) return <div className="p-10">Loading...</div>;
-  if (!game) return <div className="p-10">Game not found</div>;
+  if (loading) return <div className="p-10 text-white">Loading...</div>;
+  if (!game) return <div className="p-10 text-red-500">Game not found</div>;
 
   return (
   <div className="min-h-screen bg-gradient-to-br from-[#0c0c14] via-[#12121c] to-[#1a1a28] text-gray-200 p-8">
@@ -364,7 +377,7 @@ export default function HostDashboard() {
     </div>
 
     {/* MAIN GRID */}
-    <div className="grid grid-cols-12 gap-6">
+    <div className="grid grid-cols-12 gap-6 mb-8">
 
       {/* LEFT COLUMN — PLAYER ROSTER */}
       <GlassPanel className="col-span-3 space-y-4" hover>
@@ -645,6 +658,73 @@ export default function HostDashboard() {
         </GlassPanel>
       </div>
     </div>
+
+    {/* ✨ NEW: MASTER CHEAT SHEET (Added seamlessly below the main grid) */}
+    {roles.length > 0 && (
+      <div className="mt-12 space-y-6">
+        <SectionHeader>📜 Master Cheat Sheet & Character Lore</SectionHeader>
+        <p className="text-sm text-gray-400 mb-6">Use this to secretly guide the game, understand players' hidden motives, and track their side-quests.</p>
+        
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+          {roles.map(role => {
+            const player = players.find(p => p.role_id === role.id);
+            
+            return (
+              <GlassPanel 
+                key={role.id} 
+                className={`p-6 flex flex-col ${role.is_killer ? 'bg-red-950/20 border-red-900/50 shadow-[0_0_15px_rgba(220,38,38,0.2)]' : ''}`}
+              >
+                {/* Card Header */}
+                <div className="flex justify-between items-start mb-4 border-b border-gray-700/50 pb-4">
+                  <div>
+                    <h3 className="text-2xl font-bold text-white mb-1">{role.name}</h3>
+                    <p className="text-sm font-bold text-yellow-400">{role.role}</p>
+                    {player && <p className="text-xs text-gray-400 mt-2 bg-gray-900 inline-block px-2 py-1 rounded">Played by: {player.name}</p>}
+                  </div>
+                  {role.is_killer && (
+                    <span className="bg-red-600 text-white text-xs font-black px-3 py-1 rounded shadow-md uppercase tracking-wider">
+                      THE KILLER
+                    </span>
+                  )}
+                </div>
+
+                {/* Card Content */}
+                <div className="space-y-5 flex-1">
+                  
+                  {/* Backstory */}
+                  <div>
+                    <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider mb-1">Backstory</h4>
+                    <p className="text-sm text-gray-300 leading-relaxed">{role?.backstory || 'None generated.'}</p>
+                  </div>
+
+                  {/* Secret Objective (Highlighted) */}
+                  <div className="bg-blue-900/20 p-4 rounded-lg border border-blue-500/20 shadow-inner">
+                    <h4 className="text-xs font-black text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                      🎯 Secret Objective
+                    </h4>
+                    <p className="text-sm text-blue-200 leading-relaxed font-medium">{role?.objective || 'None generated.'}</p>
+                  </div>
+
+                  {/* Motive & Alibi */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                    <div>
+                      <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider mb-1">Motive</h4>
+                      <p className="text-sm text-gray-300 leading-relaxed">{role.motive}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider mb-1">Alibi</h4>
+                      <p className="text-sm text-gray-300 leading-relaxed">{role.alibi}</p>
+                    </div>
+                  </div>
+
+                </div>
+              </GlassPanel>
+            );
+          })}
+        </div>
+      </div>
+    )}
+
   </div>
 );
 }
