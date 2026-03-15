@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     // Validate game exists
     const { data: game, error: gameError } = await supabase
       .from('games')
-      .select('id, phase')
+      .select('id, phase, current_round, max_rounds, settings')
       .eq('id', gameId)
       .single()
 
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     // Validate player exists
     const { data: player, error: playerError } = await supabase
       .from('players')
-      .select('id, game_id, is_host, role_id, suspicion_level')
+      .select('id, game_id, is_host, role_id, suspicion_level, name')
       .eq('id', playerId)
       .single()
 
@@ -81,8 +81,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 🔥 Suspicion Engine: Compare claimed location with true hidden location
+    // ── Tone derived from current round (aligned with advance engine) ──
+    const tone =
+      game.current_round >= 3
+        ? 'dire'
+        : game.current_round >= 2
+        ? 'tense'
+        : 'calm'
 
+    const prefix =
+      tone === 'dire' ? '🔴' : tone === 'tense' ? '🟠' : '🟡'
+
+    // ── Suspicion Engine: Weighted contradiction severity ──
     if (player.role_id) {
       const { data: role } = await supabase
         .from('roles')
@@ -91,30 +101,59 @@ export async function POST(request: NextRequest) {
         .single()
 
       let suspicionDelta = 0
-      let contradictionType: 'lie' | 'truth' | 'neutral' = 'neutral'
+      let contradictionType:
+        | 'strong_lie'
+        | 'minor_lie'
+        | 'truth'
+        | 'neutral' = 'neutral'
+
+      let systemMessage = ''
 
       const trueLocation = role?.true_location?.toLowerCase()?.trim()
       const claimed = claimedLocation?.toLowerCase()?.trim()
 
       if (trueLocation && claimed) {
-        if (claimed !== trueLocation) {
-          suspicionDelta = 20
-          contradictionType = 'lie'
-        } else {
+        if (claimed === trueLocation) {
+          // Truth: small reward
           suspicionDelta = -5
           contradictionType = 'truth'
+          systemMessage = `${prefix} ${player.name}'s account holds together — for now. Consistency noted.`
+        } else {
+          const partialMatch =
+            trueLocation.includes(claimed) ||
+            claimed.includes(trueLocation)
+
+          if (partialMatch) {
+            // Minor lie
+            suspicionDelta =
+              tone === 'dire' ? 12 : 8
+            contradictionType = 'minor_lie'
+            systemMessage = `${prefix} ${player.name}'s alibi feels imprecise. The location overlaps — but the details are blurry.`
+          } else {
+            // Strong lie
+            suspicionDelta =
+              tone === 'dire'
+                ? 28
+                : tone === 'tense'
+                ? 22
+                : 15
+            contradictionType = 'strong_lie'
+            systemMessage = `${prefix} A significant discrepancy surfaces. ${player.name} claims to have been somewhere they were not.`
+          }
         }
       }
 
       const previousSuspicion = player.suspicion_level || 0
-      const newSuspicion = Math.max(0, previousSuspicion + suspicionDelta)
+      const newSuspicion = Math.max(
+        0,
+        previousSuspicion + suspicionDelta
+      )
 
       await supabase
         .from('players')
         .update({ suspicion_level: newSuspicion })
         .eq('id', playerId)
 
-      // Detailed structured log
       await supabase.from('game_logs').insert({
         game_id: gameId,
         type: 'alibi_analysis',
@@ -124,27 +163,17 @@ export async function POST(request: NextRequest) {
           contradictionType,
           previousSuspicion,
           newSuspicion,
-          delta: suspicionDelta
+          delta: suspicionDelta,
+          tone
         })
       })
 
-      // AI-style escalation message (visible to everyone, but vague)
-      if (contradictionType === 'lie') {
+      if (systemMessage) {
         await supabase.from('messages').insert({
           game_id: gameId,
           sender_id: playerId,
           recipient_id: null,
-          content: `⚠ Subtle inconsistencies ripple through the room. Someone’s timeline may not add up...`,
-          is_system_message: true
-        })
-      }
-
-      if (contradictionType === 'truth') {
-        await supabase.from('messages').insert({
-          game_id: gameId,
-          sender_id: playerId,
-          recipient_id: null,
-          content: `🧠 The alibi aligns… for now. But trust is fragile in this room.`,
+          content: systemMessage,
           is_system_message: true
         })
       }
@@ -155,7 +184,7 @@ export async function POST(request: NextRequest) {
       game_id: gameId,
       sender_id: playerId,
       recipient_id: null,
-      content: `📝 ${playerId} submitted an alibi for Round ${round}. The room grows tense...`,
+      content: `📝 An alibi has been submitted for Round ${round}. The room shifts uneasily.`,
       is_system_message: true
     })
 

@@ -1,157 +1,130 @@
-import { AIGenerationInput, AIGenerationOutput } from '@/types';
+// Define the types directly here to avoid import errors
+export interface AIGenerationInput {
+  gameName?: string;
+  playerNames: string[];
+  locations: string[];
+  theme: string;
+  customNotes?: string;
+}
+
+export interface AIGenerationOutput {
+  story: string;
+  victim: string;
+  killer: string;
+  characters: {
+    name: string;
+    role: string;
+    personality: string;
+    motive: string;
+    alibi: string;
+    secrets: string[];
+  }[];
+  locations: string[];
+  clues: {
+    text: string;
+    location: string;
+  }[];
+  timeline: string[];
+  twists: string[];
+  evidence: string[];
+  endingText: string;
+}
+
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+
+// Initialize the Gemini SDK
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function generateMysteryGame(
   input: AIGenerationInput
 ): Promise<AIGenerationOutput> {
 
-  const prompt = `
-You are a JSON API generator.
-
-IMPORTANT RULES:
-- Output ONLY valid raw JSON.
-- Do NOT use markdown.
-- Do NOT wrap in \`\`\`json.
-- Do NOT explain anything.
-- No trailing commas.
-- Ensure all arrays are valid JSON arrays.
-
-Return STRICTLY this JSON format:
-
-{
-  "story": "string",
-  "victim": "string",
-  "killer": "string",
-  "characters": [
-    {
-      "name": "string",
-      "role": "string",
-      "secrets": ["string"],
-      "motive": "string",
-      "true_location": "string",
-      "public_alibi": "string",
-      "personality": "string"
+  // We are now using the powerful gemini-2.5-flash model your key supports
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    generationConfig: {
+      responseMimeType: "application/json", // This strictly enforces JSON output
+      responseSchema: {
+        type: SchemaType.OBJECT,
+        properties: {
+          story: { type: SchemaType.STRING, description: "A gripping 2-paragraph setup of the murder." },
+          victim: { type: SchemaType.STRING },
+          killer: { type: SchemaType.STRING, description: "MUST be one of the provided players." },
+          characters: {
+            type: SchemaType.ARRAY,
+            items: {
+              type: SchemaType.OBJECT,
+              properties: {
+                name: { type: SchemaType.STRING },
+                role: { type: SchemaType.STRING },
+                personality: { type: SchemaType.STRING },
+                motive: { type: SchemaType.STRING },
+                alibi: { type: SchemaType.STRING },
+                secrets: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
+              },
+              // Forcing Gemini to generate these exact fields prevents DB errors
+              required: ["name", "role", "personality", "motive", "alibi", "secrets"]
+            }
+          },
+          locations: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+          clues: {
+            type: SchemaType.ARRAY,
+            items: {
+              type: SchemaType.OBJECT,
+              properties: {
+                text: { type: SchemaType.STRING },
+                location: { type: SchemaType.STRING }
+              },
+              required: ["text", "location"]
+            }
+          },
+          timeline: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+          twists: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+          evidence: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+          endingText: { type: SchemaType.STRING }
+        },
+        required: ["story", "victim", "killer", "characters", "locations", "clues", "timeline", "twists", "evidence", "endingText"]
+      }
     }
-  ],
-  "locations": ["string"],
-  "clues": [
-    {
-      "text": "string",
-      "location": "string"
-    }
-  ],
-  "timeline": ["string"],
-  "twists": ["string"],
-  "evidence": ["string"],
-  "endingText": "string"
-}
-
-Players: ${input.playerNames.join(", ")}
-Locations: ${input.locations.join(", ")}
-Theme: ${input.theme}
-Notes: ${input.customNotes ?? ""}
-`;
-
-  const controller = new AbortController();
-  setTimeout(() => controller.abort(), 120000); // 2 minutes
-
-  const response = await fetch('http://127.0.0.1:11434/api/generate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'phi3:mini',
-      prompt,
-      temperature: 0.4,
-      top_p: 0.9,
-      stream: false
-    }),
-    signal: controller.signal
   });
 
-  if (!response.ok) {
-    throw new Error('Ollama request failed');
-  }
+  const prompt = `
+  You are a master mystery writer. Create a logical, engaging murder mystery game.
+  
+  Players: ${input.playerNames.join(", ")}
+  Locations: ${input.locations.join(", ")}
+  Theme: ${input.theme}
+  Notes: ${input.customNotes ?? "None"}
 
-  const data = await response.json();
-  console.log("OLLAMA RAW:", data?.response);
-
-  let raw = data?.response ?? '';
-
-  if (!raw) {
-    console.error('Empty AI response');
-    return {
-      story: 'A mysterious murder has occurred.',
-      victim: 'Unknown Victim',
-      killer: input.playerNames[0] || '',
-      characters: [],
-      locations: input.locations,
-      clues: [],
-      timeline: [],
-      twists: [],
-      evidence: [],
-      endingText: 'The mystery is solved.'
-    };
-  }
-
-  // Aggressive cleanup
-  raw = raw
-    .replace(/```json/gi, '')
-    .replace(/```/g, '')
-    .replace(/\n/g, ' ')
-    .trim();
-
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-
-  if (start === -1 || end === -1) {
-    console.error('Model did not return valid JSON block:', raw);
-    return {
-      story: 'A mysterious murder has occurred.',
-      victim: 'Unknown Victim',
-      killer: input.playerNames[0] || '',
-      characters: [],
-      locations: input.locations,
-      clues: [],
-      timeline: [],
-      twists: [],
-      evidence: [],
-      endingText: 'The mystery is solved.'
-    };
-  }
-
-  const jsonString = raw.slice(start, end + 1);
-
-  let parsed: any = {};
+  RULES:
+  1. The "killer" MUST be exactly one of the players listed above.
+  2. Every character needs a distinct motive, alibi, personality, and at least 2 dark secrets.
+  3. Clues must logically point towards the killer's timeline, with a few red herrings pointing to innocent characters.
+  4. Ensure clues are placed ONLY in the provided locations.
+  `;
 
   try {
-    parsed = JSON.parse(jsonString);
-  } catch (err) {
-    console.error('Invalid JSON from model:', jsonString);
-    return {
-      story: 'A mysterious murder has occurred.',
-      victim: 'Unknown Victim',
-      killer: input.playerNames[0] || '',
-      characters: [],
-      locations: input.locations,
-      clues: [],
-      timeline: [],
-      twists: [],
-      evidence: [],
-      endingText: 'The mystery is solved.'
-    };
-  }
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    
+    // Because we used responseSchema, this will parse flawlessly without regex hacks
+    const parsed = JSON.parse(text);
 
-  return {
-    story: parsed.story || 'A mysterious murder has occurred.',
-    victim: parsed.victim || 'Unknown Victim',
-    killer: parsed.killer || input.playerNames[0] || '',
-    characters: Array.isArray(parsed.characters) ? parsed.characters : [],
-    locations: Array.isArray(parsed.locations) && parsed.locations.length
-      ? parsed.locations
-      : input.locations,
-    clues: Array.isArray(parsed.clues) ? parsed.clues : [],
-    timeline: Array.isArray(parsed.timeline) ? parsed.timeline : [],
-    twists: Array.isArray(parsed.twists) ? parsed.twists : [],
-    evidence: Array.isArray(parsed.evidence) ? parsed.evidence : [],
-    endingText: parsed.endingText || 'The mystery is solved.'
-  };
+    return {
+      story: parsed.story,
+      victim: parsed.victim,
+      killer: parsed.killer,
+      characters: parsed.characters,
+      locations: parsed.locations,
+      clues: parsed.clues,
+      timeline: parsed.timeline,
+      twists: parsed.twists,
+      evidence: parsed.evidence || [],
+      endingText: parsed.endingText
+    };
+  } catch (error) {
+    // If it fails, this will log the exact reason to your Next.js terminal
+    console.error("GEMINI API ERROR:", error);
+    throw new Error('AI failed to generate the mystery.');
+  }
 }

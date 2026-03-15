@@ -254,6 +254,7 @@ export default function GameLobby() {
           gameId: game_id,
           playerId,
           alibi: alibiText.trim(),
+          round: game?.current_round || 1,
         }),
       });
 
@@ -308,6 +309,7 @@ export default function GameLobby() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'join',
+          gameId: game_id,
           allianceId,
           playerId,
         }),
@@ -616,14 +618,28 @@ export default function GameLobby() {
                     </div>
                   </div>
 
-                  <AlliancePanel
-                    alliances={alliances}
-                    players={players}
-                    currentPlayer={currentPlayer}
-                    currentRound={game.current_round || 1}
-                    onCreateAlliance={handleCreateAlliance}
-                    onJoinAlliance={handleJoinAlliance}
+                <div className="mb-4 flex gap-2">
+                  <input
+                    value={newAllianceName}
+                    onChange={(e) => setNewAllianceName(e.target.value)}
+                    placeholder="Create alliance name..."
+                    className="flex-1 bg-[#1f1f2e] border border-purple-500/30 rounded-xl px-3 py-2 text-sm"
                   />
+                  <button
+                    onClick={handleCreateAlliance}
+                    className="bg-purple-600 hover:bg-purple-500 transition px-4 rounded-xl text-sm"
+                  >
+                    Create
+                  </button>
+                </div>
+                <AlliancePanel
+                  alliances={alliances}
+                  players={players}
+                  currentPlayer={currentPlayer}
+                  currentRound={game.current_round || 1}
+                  onCreateAlliance={handleCreateAlliance}
+                  onJoinAlliance={handleJoinAlliance}
+                />
 
                   {/* ALIBI PANEL */}
                   <div className="bg-gradient-to-br from-[#1b1b2a] to-[#12121a] border border-blue-500/40 rounded-2xl p-6 shadow-2xl space-y-4">
@@ -709,6 +725,7 @@ export default function GameLobby() {
                                 gameId: game_id,
                                 voterId: playerId,
                                 accusedId: selectedVote,
+                                round: game.current_round || 1,
                               }),
                             });
 

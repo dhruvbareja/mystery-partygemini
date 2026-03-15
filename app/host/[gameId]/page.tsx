@@ -203,6 +203,7 @@ export default function HostDashboard() {
       }
     }
 
+  
     // Move to role reveal phase
     await supabase
       .from('games')
@@ -506,6 +507,10 @@ export default function HostDashboard() {
               })}
           </div>
         </GlassPanel>
+
+
+
+        
 
         {/* ALLIANCES OVERVIEW */}
         <GlassPanel hover>
