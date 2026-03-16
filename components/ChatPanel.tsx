@@ -1,201 +1,271 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Player, Message, GameData } from '@/types';
+import { Send, Globe, User, ShieldAlert, Paperclip, Search, X } from 'lucide-react';
+import { Message, Player, Clue } from '@/types';
 
-interface Props {
-  game: GameData;
-  player: Player;
-  players: Player[];
+interface ChatPanelProps {
   messages: Message[];
-  selectedDM: string | null;
-  setSelectedDM: (id: string | null) => void;
-  messageInput: string;
-  setMessageInput: (v: string) => void;
-  sendMessage: (e: React.FormEvent) => void;
-  phase: string;
+  players: Player[];
+  currentPlayer: Player;
+  clues: Clue[];
+  gamePhase: string;
+  onSendMessage: (content: string, recipientId: string | null) => Promise<void>;
 }
 
 export default function ChatPanel({
-  game,
-  player,
-  players,
   messages,
-  selectedDM,
-  setSelectedDM,
-  messageInput,
-  setMessageInput,
-  sendMessage,
-  phase
-}: Props) {
+  players,
+  currentPlayer,
+  clues,
+  gamePhase,
+  onSendMessage
+}: ChatPanelProps) {
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  const [activeTab, setActiveTab] = useState<'global' | 'whispers'>('global');
+  const [selectedDM, setSelectedDM] = useState<string | null>(null);
+  const [messageInput, setMessageInput] = useState('');
+  const [showEvidenceMenu, setShowEvidenceMenu] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
-  const displayMessages = selectedDM
-    ? messages.filter(
-        m =>
-          (m.sender_id === player.id && m.recipient_id === selectedDM) ||
-          (m.sender_id === selectedDM && m.recipient_id === player.id)
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, activeTab, selectedDM]);
+
+  // Filter messages based on active tab
+  const displayMessages = activeTab === 'whispers' && selectedDM
+    ? messages.filter(m => 
+        (m.sender_id === currentPlayer.id && m.recipient_id === selectedDM) || 
+        (m.sender_id === selectedDM && m.recipient_id === currentPlayer.id)
       )
     : messages.filter(m => m.recipient_id === null);
 
+  const handleSend = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!messageInput.trim() || isSending) return;
+
+    setIsSending(true);
+    const targetRecipient = activeTab === 'whispers' ? selectedDM : null;
+    
+    await onSendMessage(messageInput.trim(), targetRecipient);
+    
+    setMessageInput('');
+    setIsSending(false);
+  };
+
+  const shareEvidence = async (clue: Clue) => {
+    setShowEvidenceMenu(false);
+    setIsSending(true);
+    const targetRecipient = activeTab === 'whispers' ? selectedDM : null;
+    
+    const evidenceMessage = `🚨 EVIDENCE SHARED [${clue.location.toUpperCase()}]:\n"${clue.text}"`;
+    await onSendMessage(evidenceMessage, targetRecipient);
+    
+    setIsSending(false);
+  };
+
+  const chatDisabled = gamePhase === 'voting' || gamePhase === 'reveal' || (activeTab === 'whispers' && !selectedDM);
+
   return (
-    <div className="bg-[#141420] border border-gray-700 rounded-2xl p-4 shadow-2xl flex flex-col h-[650px]">
-
-      {/* CHANNEL HEADER */}
-      <div className="flex justify-between items-center mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold tracking-wide text-purple-400">
-            {selectedDM ? "🤝 Alliance Channel" : "🌐 Global Channel"}
-          </span>
-
-          {selectedDM && (
-            <span className="text-[10px] px-2 py-0.5 bg-green-700 text-white rounded-full animate-pulse">
-              ALLIANCE
-            </span>
-          )}
+    <div className="bg-[#111118] border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
+      
+      {/* HEADER & TABS */}
+      <div className="bg-black/40 border-b border-white/10 p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <ShieldAlert className="text-indigo-400" size={18} />
+          <h2 className="text-sm font-black text-white uppercase tracking-widest">Secure Comms Link</h2>
         </div>
 
-        {selectedDM && (
-          <span className="text-xs text-green-400">
-            Private DM
-          </span>
-        )}
+        <div className="flex gap-2 bg-black/50 p-1 rounded-xl border border-white/5">
+          <button
+            onClick={() => setActiveTab('global')}
+            className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'global' ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30' : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            <Globe size={14} /> Global
+          </button>
+          <button
+            onClick={() => setActiveTab('whispers')}
+            className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'whispers' ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30' : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            <User size={14} /> Whispers
+          </button>
+        </div>
       </div>
 
-      {/* DM Selector */}
-      <div className="flex gap-2 flex-wrap text-xs mb-3">
-        <button
-          onClick={() => setSelectedDM(null)}
-          className={`px-3 py-1 rounded-full border transition ${
-            !selectedDM
-              ? 'bg-purple-700 border-purple-500 text-white'
-              : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
-          }`}
-        >
-          🌐 Global
-        </button>
-
-        {players
-          .filter(p => p.id !== player.id && !p.is_host)
-          .map(p => (
+      {/* WHISPER SELECTOR */}
+      {activeTab === 'whispers' && (
+        <div className="bg-black/30 border-b border-white/5 p-3 overflow-x-auto whitespace-nowrap scrollbar-hide flex gap-2">
+          {players.filter(p => !p.is_host && p.id !== currentPlayer.id).map(p => (
             <button
               key={p.id}
               onClick={() => setSelectedDM(p.id)}
-              className={`px-3 py-1 rounded-full border transition ${
-                selectedDM === p.id
-                  ? 'bg-green-700 border-green-500 text-white'
-                  : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700'
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                selectedDM === p.id 
+                  ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(147,51,234,0.4)]' 
+                  : 'bg-[#1f1f2e] text-gray-400 hover:text-white hover:bg-white/10'
               }`}
             >
-              🤝 {p.name}
+              <div className="w-5 h-5 rounded-full bg-black/50 flex items-center justify-center text-[10px]">
+                {p.avatar || '👤'}
+              </div>
+              {p.name}
             </button>
           ))}
-      </div>
-
-      {/* Intro Prompt */}
-      {phase === 'intro_round' && !selectedDM && (
-        <div className="bg-yellow-900/30 border border-yellow-600/40 p-3 rounded-lg text-sm text-yellow-300 mb-3 animate-pulse">
-          ✍️ Introduce your character. Where were you during the murder?
+          {players.filter(p => !p.is_host).length <= 1 && (
+             <span className="text-xs text-gray-500 italic p-2">No other operatives available.</span>
+          )}
         </div>
       )}
 
-      {/* MESSAGE AREA */}
-      <div className="flex-1 overflow-y-auto space-y-4 bg-[#101019] p-4 rounded-xl border border-gray-800">
-        <AnimatePresence>
-          {displayMessages.map(msg => {
-            const sender = players.find(p => p.id === msg.sender_id);
-            const isOwn = msg.sender_id === player.id;
+      {/* MESSAGE FEED */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
+        {displayMessages.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50 space-y-2">
+            <Globe size={40} />
+            <p className="text-xs font-bold uppercase tracking-widest">Comm Channel Empty</p>
+          </div>
+        ) : (
+          displayMessages.map(msg => {
+            const isOwn = msg.sender_id === currentPlayer.id;
             const isSystem = msg.is_system_message;
+            const sender = players.find(p => p.id === msg.sender_id);
+            const isEvidence = msg.content.includes('🚨 EVIDENCE SHARED');
 
             if (isSystem) {
               return (
-                <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{
-                    opacity: 1,
-                    scale: [1, 1.03, 1],
-                  }}
-                  transition={{
-                    duration: 1.2,
-                    repeat: Infinity,
-                    repeatType: "reverse"
-                  }}
-                  className="text-center text-yellow-400 text-xs tracking-wide bg-yellow-900/20 border border-yellow-500 rounded-lg py-2 shadow-[0_0_20px_rgba(255,215,0,0.5)]"
-                >
-                  ⚡ {msg.content}
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key={msg.id} className="text-center my-4">
+                  <span className="inline-block bg-indigo-900/30 border border-indigo-500/30 text-indigo-300 text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-full whitespace-pre-wrap shadow-inner">
+                    ⚡ {msg.content}
+                  </span>
                 </motion.div>
               );
             }
 
             return (
-              <motion.div
-                key={msg.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25 }}
-                className={`flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'}`}
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, transformOrigin: isOwn ? 'right' : 'left' }} 
+                animate={{ opacity: 1, scale: 1 }} 
+                key={msg.id} 
+                className={`flex w-full ${isOwn ? 'justify-end' : 'justify-start'}`}
               >
-                {!isOwn && (
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 border border-purple-500 flex items-center justify-center text-sm shadow-md">
-                    {sender?.avatar || '🎭'}
-                  </div>
-                )}
-
-                <div
-                  className={`max-w-xs px-4 py-2 rounded-2xl text-sm shadow-lg ${
-                    isOwn
-                      ? 'bg-gradient-to-br from-blue-600 to-blue-500 text-white rounded-br-none'
-                      : selectedDM
-                      ? 'bg-gradient-to-br from-green-700 to-green-600 text-white rounded-bl-none'
-                      : 'bg-gray-700 text-gray-200 rounded-bl-none'
-                  }`}
-                >
+                <div className={`max-w-[85%] flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
+                  {/* Sender Name */}
                   {!isOwn && (
-                    <div className="text-[10px] uppercase tracking-wider opacity-70 mb-1">
-                      {sender?.name}
-                    </div>
+                    <span className="text-[10px] text-gray-500 font-bold ml-1 mb-1 tracking-wider uppercase">
+                      {sender?.name || 'Unknown'}
+                    </span>
                   )}
-
-                  <div>{msg.content}</div>
-
-                  {selectedDM && (
-                    <div className="text-[9px] mt-2 inline-block px-2 py-0.5 bg-green-800 text-green-200 rounded-full">
-                      🤝 Alliance DM
-                    </div>
-                  )}
-
-                  <div className="text-[9px] mt-1 opacity-50 text-right">
-                    {new Date(msg.created_at).toLocaleTimeString()}
+                  
+                  {/* Bubble */}
+                  <div className={`p-4 rounded-2xl ${
+                    isEvidence
+                      ? 'bg-yellow-950/40 border border-yellow-500/50 text-yellow-200' 
+                      : isOwn 
+                      ? 'bg-indigo-600 text-white rounded-br-sm shadow-[0_4px_15px_rgba(79,70,229,0.3)]' 
+                      : 'bg-[#1f1f2e] text-gray-200 rounded-bl-sm border border-white/5'
+                  }`}>
+                    <p className={`text-sm whitespace-pre-wrap ${isEvidence ? 'font-mono' : ''}`}>
+                      {msg.content}
+                    </p>
                   </div>
                 </div>
-
-                {isOwn && (
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-700 to-blue-900 border border-blue-400 flex items-center justify-center text-sm shadow-md">
-                    {player.avatar || '🎭'}
-                  </div>
-                )}
               </motion.div>
             );
-          })}
-        </AnimatePresence>
+          })
+        )}
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* INPUT */}
-      <form onSubmit={sendMessage} className="flex gap-2 mt-4">
-        <input
-          value={messageInput}
-          onChange={e => setMessageInput(e.target.value)}
-          className="flex-1 px-4 py-2 rounded-xl bg-gray-800 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-          placeholder={
-            selectedDM
-              ? "Send alliance message..."
-              : "Type your message..."
-          }
-        />
-        <button className="bg-purple-600 hover:bg-purple-500 transition px-4 rounded-xl text-sm font-medium">
-          Send
-        </button>
-      </form>
+      {/* INPUT AREA */}
+      <div className="bg-black/50 p-3 border-t border-white/5 relative">
+        
+        {/* Evidence Popover */}
+        <AnimatePresence>
+          {showEvidenceMenu && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              exit={{ opacity: 0, y: 10 }}
+              className="absolute bottom-[100%] left-4 right-4 mb-2 bg-[#1f1f2e] border border-white/10 rounded-2xl shadow-2xl p-4 z-20 max-h-[250px] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center mb-3 border-b border-white/5 pb-2">
+                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <Search size={14}/> Share Discovered Evidence
+                </h3>
+                <button onClick={() => setShowEvidenceMenu(false)} className="text-gray-500 hover:text-white">
+                  <X size={16} />
+                </button>
+              </div>
+              
+              {clues.length === 0 ? (
+                <p className="text-xs text-gray-500 italic p-2 text-center">No evidence has been revealed to you yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {clues.map(c => (
+                    <button 
+                      key={c.id} 
+                      onClick={() => shareEvidence(c)}
+                      className="w-full text-left bg-black/40 hover:bg-indigo-900/40 border border-white/5 hover:border-indigo-500/50 p-3 rounded-xl transition-all group"
+                    >
+                      <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">📍 {c.location}</p>
+                      <p className="text-xs text-gray-300 line-clamp-2 group-hover:text-white">{c.text}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {chatDisabled && (
+           <div className="absolute inset-0 z-10 bg-black/70 backdrop-blur-sm flex items-center justify-center">
+             <p className="text-xs font-bold text-red-400 uppercase tracking-widest flex items-center gap-2">
+               <Lock size={14} /> 
+               {gamePhase === 'voting' || gamePhase === 'reveal' ? 'Comms Locked' : 'Select an Operative'}
+             </p>
+           </div>
+        )}
+
+        <form onSubmit={handleSend} className="flex gap-2 relative z-0">
+          <button
+            type="button"
+            onClick={() => setShowEvidenceMenu(!showEvidenceMenu)}
+            disabled={chatDisabled}
+            className={`p-3 rounded-xl border transition-all flex items-center justify-center ${
+              showEvidenceMenu 
+                ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400' 
+                : 'bg-[#1f1f2e] border-white/10 text-gray-400 hover:text-white hover:border-white/30'
+            }`}
+            title="Share Evidence"
+          >
+            <Paperclip size={18} />
+          </button>
+          
+          <input
+            value={messageInput}
+            onChange={e => setMessageInput(e.target.value)}
+            placeholder={activeTab === 'global' ? "Transmit to everyone..." : "Whisper secretly..."}
+            disabled={chatDisabled || isSending}
+            className="flex-1 bg-[#1f1f2e] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all disabled:opacity-50"
+          />
+          
+          <button 
+            type="submit"
+            disabled={chatDisabled || isSending || !messageInput.trim()}
+            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:hover:bg-indigo-600 text-white p-3 rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)] flex items-center justify-center"
+          >
+            <Send size={18} className={isSending ? 'animate-pulse' : ''} />
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
